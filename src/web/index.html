@@ -130,9 +130,19 @@ function wirePagingGeneric(host, firstItems, total, renderItem, fetchNext){
     });
   };
   refreshBtn();
+  // lets a periodic check add newly-arrived items at the top without rebuilding anything
+  // (no touching open folders, playing videos, scroll position, Ver más state...)
+  return {
+    prependNew: function(newItems){
+      newItems.slice().reverse().forEach(function(it){ host.insertBefore(renderItem(it), host.firstChild); });
+      total+=newItems.length; shown+=newItems.length;
+      refreshBtn();
+    },
+    getTotal: function(){ return total; }
+  };
 }
 function wirePaging(host, day, firstClips, total){
-  wirePagingGeneric(host, firstClips, total, renderClipRow, function(off){ return fetchPage(day, off); });
+  return wirePagingGeneric(host, firstClips, total, renderClipRow, function(off){ return fetchPage(day, off); });
 }
 function pollMotion(){
   fetch('/cgi-bin/health.cgi').then(function(r){return r.json();}).then(function(j){
@@ -182,14 +192,26 @@ function loadClips(){
       h.textContent=prettyDay(j.today)+' (hoy)'; todayHost.appendChild(h);
       var flat=document.createElement('div'); flat.className='clips';
       todayHost.appendChild(flat);
-      wirePaging(flat, '', j.clips, j.total);
+      todayCtl = wirePaging(flat, '', j.clips, j.total);
     }
     if(hasDays){
       wirePagingGeneric(daysHost, jd.days, jd.total, renderDayFolder, fetchDaysPage);
     }
   }).catch(function(){ document.getElementById('clips').innerHTML='<span class="muted">No se pudo leer la lista.</span>'; });
 }
-loadClips(); setInterval(loadClips, 15000);
+// periodic check: only ADDS newly-arrived clips at the top of today's list (no full rebuild,
+// so an open day-folder, a playing video or the scroll position are never disturbed)
+var todayCtl=null;
+function pollNewClips(){
+  if(!todayCtl) return;
+  fetchPage('', 0).then(function(j){
+    document.getElementById('recdot').className='dot'+(j.recording?' on':'');
+    var newCount=j.total-todayCtl.getTotal();
+    if(newCount>0){ todayCtl.prependNew((j.clips||[]).slice(0, newCount)); }
+  }).catch(function(){});
+}
+loadClips();
+setInterval(pollNewClips, 10000);
 
 // ---- misc ----
 document.getElementById('rtsp').textContent='rtsp://'+location.hostname+':554/vs0';
