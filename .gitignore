@@ -1,0 +1,49 @@
+# --- Proprietary / device material: NEVER commit (supply from your own device) ---
+# Anyka SDK and libraries
+*.so
+*.so.*
+ANYKA_*_SDK/
+sdk/
+vendor/
+libplat_*.so
+libmpi_*.so
+librtsp_server.so
+libak*.so
+viCam
+
+# Firmware images / dumps / flash
+*.bin
+dump.bin
+full.bin
+*.pkg
+*.fw
+firmware/*.img
+
+# Credentials / secrets (must never be here)
+*.key
+*.pem
+*.der
+authorized_keys
+*passwd*
+*shadow*
+deploy/auth.env
+deploy/factorytest/wifi.txt
+
+# Build artifacts
+work/
+out/
+build/
+*.o
+*.a
+rtspd
+sntpc
+motorctl
+
+# Editor / OS
+.DS_Store
+*.swp
+*~
+
+# Python bytecode cache
+__pycache__/
+*.pyc

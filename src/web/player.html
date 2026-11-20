@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Grabación</title>
+<style>
+  :root{ --bg:#0f1115; --fg:#e8eaed; --mut:#9aa0ab; --acc:#3b82f6; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--fg); font:15px/1.4 system-ui,Segoe UI,Roboto,sans-serif;
+        display:flex; flex-direction:column; align-items:center; padding:16px; min-height:100vh; }
+  video{ width:100%; max-width:900px; border-radius:10px; background:#000; }
+  .bar{ width:100%; max-width:900px; display:flex; align-items:center; gap:10px; margin-top:10px; }
+  .name{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--mut); font-size:13px; }
+  a.dl, a.home{ color:var(--acc); text-decoration:none; font-size:14px; flex:0 0 auto; }
+  .err{ color:var(--mut); margin-top:40px; text-align:center; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+function qs(name){
+  var m = new RegExp('[?&]'+name+'=([^&]*)').exec(location.search);
+  return m ? decodeURIComponent(m[1].replace(/\+/g,' ')) : '';
+}
+var url = qs('url');
+var app = document.getElementById('app');
+if(!url || !/^\/rec\//.test(url)){
+  app.innerHTML = '<div class="err">Falta o es inválido el parámetro ?url= (debe empezar por /rec/).</div><div class="bar"><a class="home" href="/">&larr; Volver al inicio</a></div>';
+} else {
+  var name = url.split('/').pop();
+  document.title = name;
+  app.innerHTML =
+    '<video src="'+url+'" controls autoplay muted playsinline></video>' +
+    '<div class="bar"><a class="home" href="/">&larr; Inicio</a><span class="name">'+name+'</span><a class="dl" href="'+url+'" download>⬇ Descargar</a></div>';
+}
+</script>
+</body>
+</html>

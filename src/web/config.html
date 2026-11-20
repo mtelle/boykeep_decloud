@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Ajustes</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --line:#272b36; --fg:#e8eaed; --mut:#9aa0ab; --acc:#3b82f6; --warn:#f59e0b; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body{ margin:0; background:var(--bg); color:var(--fg); font:15px/1.4 system-ui,Segoe UI,Roboto,sans-serif; }
+  header{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:5; }
+  header h1{ font-size:16px; margin:0; font-weight:600; }
+  header a{ color:var(--acc); text-decoration:none; margin-left:auto; font-size:14px; }
+  main{ max-width:640px; margin:0 auto; padding:16px; }
+  .card{ background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:16px; }
+  h2{ font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--mut); margin:0 0 12px; }
+  .row{ display:flex; align-items:flex-start; gap:10px; margin:12px 0; }
+  .row label{ flex:1; min-width:0; }
+  .row label .desc{ display:block; color:var(--mut); font-size:12px; margin-top:2px; }
+  .row label .desc .en{ display:block; font-style:italic; opacity:.8; margin-top:1px; }
+  .row input[type=number]{ width:88px; background:#222633; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:8px; font-size:15px; text-align:right; flex:0 0 auto; }
+  .row label.sw{ flex:0 0 auto; width:46px; }
+  .sw{ position:relative; width:46px; height:26px; flex:0 0 auto; margin-top:2px; }
+  .sw input{ opacity:0; width:0; height:0; }
+  .sl{ position:absolute; inset:0; background:#333845; border-radius:26px; transition:.15s; cursor:pointer; }
+  .sl:before{ content:""; position:absolute; width:20px; height:20px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.15s; }
+  .sw input:checked + .sl{ background:var(--acc); }
+  .sw input:checked + .sl:before{ transform:translateX(20px); }
+  .actions{ display:flex; gap:10px; position:sticky; bottom:0; background:var(--bg); padding:12px 0; }
+  button{ flex:1; border:0; border-radius:10px; padding:14px 0; font-size:15px; font-weight:600; cursor:pointer; }
+  .save{ background:#222633; color:var(--fg); border:1px solid var(--line); }
+  .apply{ background:var(--acc); color:#fff; }
+  .note{ color:var(--mut); font-size:13px; }
+  .note .en{ font-style:italic; opacity:.8; }
+  .msg{ color:var(--warn); font-size:14px; min-height:18px; margin-top:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚙ Ajustes de la cámara</h1>
+  <a href="/">← Volver</a>
+</header>
+<main>
+  <div class="card">
+    <h2>Detección de movimiento / Motion detection</h2>
+    <div class="row"><label>Activada
+      <span class="desc">Enciende o apaga la detección de movimiento por completo.
+        <span class="en">Turns motion detection fully on or off.</span></span>
+      </label><label class="sw"><input type="checkbox" id="MD"><span class="sl"></span></label></div>
+
+    <div class="row"><label>Umbral por celda
+      <span class="desc">La imagen se divide en una rejilla; cada celda puntúa cuánto ha cambiado entre
+        fotogramas. Este valor es el umbral que una celda debe superar para contar. Mayor = hace falta
+        más cambio por celda = menos sensible.
+        <span class="en">The frame is split into a grid; each cell scores how much it changed between
+          frames. This is the threshold a cell must exceed to count. Higher = less sensitive.</span></span>
+      </label><input type="number" id="MD_CELL_TH" min="0" max="1000"></div>
+
+    <div class="row"><label>Celdas para disparar
+      <span class="desc">Cuántas celdas deben superar el umbral a la vez para considerar que hay
+        movimiento real (filtra ruido puntual: un insecto, un parpadeo de luz). Mayor = hace falta una
+        zona más amplia en movimiento = menos sensible.
+        <span class="en">How many cells must exceed the threshold at once to count as real motion
+          (filters out a single flickering light, an insect). Higher = less sensitive.</span></span>
+      </label><input type="number" id="MD_MIN_CELLS" min="1" max="200"></div>
+
+    <div class="row"><label>Cola tras movimiento
+      <span class="desc">Segundos que sigue grabando después de que el movimiento pare, antes de
+        cortar el clip. Evita cortes bruscos si el movimiento se pausa un instante.
+        <span class="en">Seconds it keeps recording after motion stops, before cutting the clip.
+          Avoids choppy cuts if motion briefly pauses.</span></span>
+      </label><input type="number" id="MD_HOLD" min="0" max="120"></div>
+
+    <div class="row"><label>Duración máx. clip
+      <span class="desc">Tope de duración de un solo fichero (segundos). Si el movimiento sigue más
+        tiempo, corta y empieza un clip nuevo en vez de un fichero gigante.
+        <span class="en">Maximum length of a single clip file (seconds). If motion keeps going longer,
+          it starts a new file instead of one huge one.</span></span>
+      </label><input type="number" id="MD_MAXCLIP" min="10" max="900"></div>
+  </div>
+
+  <div class="card">
+    <h2>Audio</h2>
+    <div class="row"><label>Grabar audio en el MP4
+      <span class="desc">⚠️ Sin efecto en este modelo: el audio está desactivado porque el chip de
+        esta cámara rechaza el códec AAC por licencia (ver docs/08).
+        <span class="en">⚠️ No effect on this unit: audio is disabled because this camera's chip
+          rejects the AAC codec for licensing reasons (see docs/08).</span></span>
+      </label><label class="sw"><input type="checkbox" id="MD_AUDIO"><span class="sl"></span></label></div>
+  </div>
+
+  <div class="card">
+    <h2>Retención / Retention <small style="text-transform:none;letter-spacing:0">(borrado automático / auto-delete)</small></h2>
+    <div class="row"><label>Espacio libre mínimo
+      <span class="desc">MB libres que intenta mantener en la SD, borrando los clips más antiguos
+        cuando hace falta espacio.
+        <span class="en">MB of free space it tries to keep on the SD, deleting the oldest clips when
+          space is needed.</span></span>
+      </label><input type="number" id="MD_MINFREE" min="50" max="100000"></div>
+
+    <div class="row"><label>Borrar clips de más de
+      <span class="desc">Días de antigüedad a partir de los cuales se borran los clips automáticamente.
+        0 = desactivado (solo borra por espacio libre, nunca por antigüedad).
+        <span class="en">Age in days after which clips are auto-deleted. 0 = disabled (only deletes by
+          free space, never by age).</span></span>
+      </label><input type="number" id="MD_KEEPDAYS" min="0" max="3650"></div>
+  </div>
+
+  <div class="card">
+    <h2>Fecha/hora en el vídeo (OSD) / On-screen timestamp</h2>
+    <div class="row"><label>Mostrar OSD
+      <span class="desc">Activa o desactiva la fecha/hora quemada en el vídeo (directo y grabaciones).
+        <span class="en">Turns the burned-in date/time stamp on or off (live view and recordings).</span></span>
+      </label><label class="sw"><input type="checkbox" id="OSD"><span class="sl"></span></label></div>
+
+    <div class="row"><label>Posición X
+      <span class="desc">Distancia en píxeles desde el borde izquierdo del vídeo.
+        <span class="en">Distance in pixels from the left edge of the video.</span></span>
+      </label><input type="number" id="OSD_X" min="0" max="4000"></div>
+
+    <div class="row"><label>Posición Y
+      <span class="desc">Distancia en píxeles desde el borde superior del vídeo.
+        <span class="en">Distance in pixels from the top edge of the video.</span></span>
+      </label><input type="number" id="OSD_Y" min="0" max="4000"></div>
+
+    <div class="row"><label>Tamaño de fuente
+      <span class="desc">Multiplicador de tamaño del texto, de 1 (pequeño) a 4 (grande).
+        <span class="en">Text size multiplier, from 1 (small) to 4 (large).</span></span>
+      </label><input type="number" id="OSD_SCALE" min="1" max="4"></div>
+
+    <div class="row"><label>Opacidad
+      <span class="desc">Opacidad del fondo del texto, de 0 (transparente) a 100 (sólido).
+        <span class="en">Background opacity behind the text, from 0 (transparent) to 100 (solid).</span></span>
+      </label><input type="number" id="OSD_ALPHA" min="0" max="100"></div>
+  </div>
+
+  <p class="msg" id="msg"></p>
+  <div class="actions">
+    <button class="save" id="btnSave">Guardar</button>
+    <button class="apply" id="btnApply">Aplicar (reinicia)</button>
+  </div>
+  <p class="note">Los cambios se aplican al reiniciar la cámara (~20 s). «Guardar» los deja listos
+    para el próximo arranque sin reiniciar.
+    <span class="en">Changes apply on the next reboot (~20 s). "Save" gets them ready for the next
+      boot without rebooting now.</span></p>
+</main>
+<script>
+var BOOL=['MD','MD_AUDIO','OSD'];
+var NUM=['MD_CELL_TH','MD_MIN_CELLS','MD_HOLD','MD_MAXCLIP','MD_MINFREE','MD_KEEPDAYS','OSD_X','OSD_Y','OSD_SCALE','OSD_ALPHA'];
+function setMsg(t,warn){ var m=document.getElementById('msg'); m.textContent=t; m.style.color=warn?'#f59e0b':'#22c55e'; }
+function load(){
+  fetch('/cgi-bin/config.cgi').then(function(r){return r.json();}).then(function(j){
+    BOOL.forEach(function(k){ var el=document.getElementById(k); if(el) el.checked = (+j[k]===1); });
+    NUM.forEach(function(k){ var el=document.getElementById(k); if(el && j[k]!=null) el.value = j[k]; });
+  }).catch(function(){ setMsg('No se pudo leer la configuración.',1); });
+}
+function qs(){
+  var p=[];
+  BOOL.forEach(function(k){ p.push(k+'='+(document.getElementById(k).checked?1:0)); });
+  NUM.forEach(function(k){ var v=document.getElementById(k).value; if(v==='') v='0'; p.push(k+'='+encodeURIComponent(v)); });
+  return p.join('&');
+}
+document.getElementById('btnSave').onclick=function(){
+  setMsg('Guardando…');
+  fetch('/cgi-bin/config.cgi?action=save&'+qs()).then(function(r){return r.json();})
+   .then(function(j){ setMsg(j.ok?'Guardado. Se aplicará en el próximo reinicio.':'Error al guardar',!j.ok); })
+   .catch(function(){ setMsg('Error al guardar.',1); });
+};
+document.getElementById('btnApply').onclick=function(){
+  if(!confirm('¿Aplicar y reiniciar la cámara ahora?')) return;
+  setMsg('Aplicando y reiniciando…',1);
+  fetch('/cgi-bin/config.cgi?action=apply&'+qs()).then(function(r){return r.json();})
+   .then(function(){ setMsg('Reiniciando… vuelve en ~20 s.',1); })
+   .catch(function(){ setMsg('Reiniciando… vuelve en ~20 s.',1); });
+};
+load();
+</script>
+</body>
+</html>

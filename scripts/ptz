@@ -1,0 +1,22 @@
+#!/bin/sh
+# ptz (edición motorctl) - usa el ak_motor.ko stock: /dev/motor0=pan, /dev/motor1=tilt
+CAM=/mnt/sdcard/cam; M=$CAM/bin/motorctl
+PAN=/dev/motor0; TILT=/dev/motor1
+PAN_SIGN=1; TILT_SIGN=1      # pon -1 si un sentido sale al revés en tu unidad
+BIG=4000                     # "continuo" (mantener pulsado en la web): mueve hasta el tope; 'stop' lo corta
+# $2 (opcional): pasos concretos en vez de BIG - para un "nudge" de un solo tap (ej. Home Assistant,
+# que no tiene pulsar-y-soltar). Con pasos pequeños el motor se detiene solo al completarlos, sin
+# necesitar un 'stop' posterior (motorctl mantiene el fd abierto hasta que el movimiento termina).
+case "$1" in
+  home|center) $M $PAN home; $M $TILT home ;;
+  left)  N=${2:-$BIG}; $M $PAN  move $((-PAN_SIGN*N)) & ;;
+  right) N=${2:-$BIG}; $M $PAN  move $(( PAN_SIGN*N)) & ;;
+  up)    N=${2:-$BIG}; $M $TILT move $(( TILT_SIGN*N)) & ;;
+  down)  N=${2:-$BIG}; $M $TILT move $((-TILT_SIGN*N)) & ;;
+  stop)  $M $PAN stop; $M $TILT stop ;;
+  rel)   $M $PAN move $(( ${2%%.*} )); $M $TILT move $(( ${3%%.*} )) ;;
+  pos)   echo "0,0,0" ;;
+  moving) echo 0 ;;
+  preset) [ "$2" = list ] && cat $CAM/conf/ptz_presets 2>/dev/null ;;
+  *) : ;;
+esac

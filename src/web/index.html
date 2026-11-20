@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Cámara</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --line:#272b36; --fg:#e8eaed; --mut:#9aa0ab; --acc:#3b82f6; --rec:#ef4444; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body{ margin:0; background:var(--bg); color:var(--fg); font:15px/1.4 system-ui,Segoe UI,Roboto,sans-serif; }
+  header{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:5; }
+  header h1{ font-size:16px; margin:0; font-weight:600; }
+  .dot{ width:10px; height:10px; border-radius:50%; background:#444; }
+  .dot.on{ background:var(--rec); box-shadow:0 0 8px var(--rec); }
+  #motiontxt{ font-size:13px; color:var(--mut); }
+  #motiontxt.on{ color:var(--rec); font-weight:600; }
+  main{ max-width:760px; margin:0 auto; padding:16px; }
+  .card{ background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:16px; }
+  .live{ position:relative; background:#000; border-radius:10px; overflow:hidden; aspect-ratio:16/9; }
+  .live img{ width:100%; height:100%; object-fit:contain; display:block; }
+  .live .tag{ position:absolute; top:8px; left:8px; background:rgba(0,0,0,.55); padding:2px 8px; border-radius:6px; font-size:12px; color:#fff; }
+  h2{ font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--mut); margin:0 0 10px; }
+  .pad{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:300px; margin:0 auto; }
+  .pad button{ background:#222633; color:var(--fg); border:1px solid var(--line); border-radius:10px; padding:16px 0; font-size:20px; cursor:pointer; user-select:none; }
+  .pad button:active{ background:var(--acc); }
+  .pad .sp{ visibility:hidden; }
+  .clips{ display:flex; flex-direction:column; gap:8px; }
+  .day{ color:var(--mut); font-size:12px; margin:10px 0 2px; }
+  .day-folder{ display:flex; align-items:center; gap:8px; padding:10px 10px; background:#1b1f28; border:1px solid var(--line); border-radius:8px; cursor:pointer; user-select:none; margin-top:4px; }
+  .day-folder .arrow{ color:var(--acc); font-size:12px; width:12px; flex:0 0 auto; }
+  .day-folder .lbl{ flex:1; }
+  .day-folder small{ color:var(--mut); }
+  .day-body{ display:flex; flex-direction:column; gap:8px; margin:4px 0 0 4px; padding-left:10px; border-left:2px solid var(--line); }
+  .clip{ display:flex; align-items:center; gap:10px; padding:8px 10px; background:#1b1f28; border:1px solid var(--line); border-radius:8px; }
+  .more{ background:#1b1f28; color:var(--acc); border:1px solid var(--line); border-radius:8px; padding:8px 10px; cursor:pointer; font-size:13px; text-align:center; }
+  .clip .t{ flex:1; min-width:0; }
+  .clip .t b{ font-weight:600; } .clip .t small{ color:var(--mut); }
+  .clip a, .clip button{ color:var(--acc); background:none; border:0; cursor:pointer; font-size:14px; text-decoration:none; }
+  video{ width:100%; border-radius:8px; margin-top:8px; background:#000; }
+  .muted{ color:var(--mut); font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="recdot"></span>
+  <span id="motiontxt">sin movimiento</span>
+  <h1>Cámara</h1>
+  <a href="/config.html" title="Ajustes" style="margin-left:auto;color:#3b82f6;text-decoration:none;font-size:18px">⚙</a>
+  <span class="muted" id="clock" style="margin-left:12px"></span>
+</header>
+<main>
+  <div class="card">
+    <div class="live"><img id="live" alt="directo"><span class="tag" id="livetag">● EN VIVO</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Mover cámara</h2>
+    <div class="pad">
+      <span class="sp"></span><button data-d="up">▲</button><span class="sp"></span>
+      <button data-d="left">◀</button><button data-d="home">⌂</button><button data-d="right">▶</button>
+      <span class="sp"></span><button data-d="down">▼</button><span class="sp"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Grabaciones por movimiento</h2>
+    <div id="clips" class="clips"><span class="muted">Cargando…</span></div>
+  </div>
+  <p class="muted">Vídeo íntegro en vivo (1080p) por RTSP: <code id="rtsp"></code> — ábrelo en VLC o Home Assistant.</p>
+</main>
+<script>
+// ---- live view: poll the snapshot JPEG (works in every browser) ----
+var live=document.getElementById('live'), FPS=5;
+function liveTick(){ var i=new Image(); i.onload=function(){ live.src=i.src; }; i.src='/snapshot.jpg?'+Date.now(); }
+setInterval(liveTick, Math.round(1000/FPS)); liveTick();
+
+// ---- PTZ: press and hold ----
+function ptz(d){ fetch('/cgi-bin/ptz.cgi?dir='+d).catch(function(){}); }
+document.querySelectorAll('.pad button').forEach(function(b){
+  var d=b.getAttribute('data-d');
+  if(d==='home'){ b.addEventListener('click',function(){ ptz('home'); }); return; }
+  var start=function(e){ e.preventDefault(); ptz(d); };
+  var end=function(){ ptz('stop'); };
+  b.addEventListener('pointerdown',start); b.addEventListener('pointerup',end);
+  b.addEventListener('pointerleave',end); b.addEventListener('pointercancel',end);
+});
+// ---- recordings: today's clips flat, other days as lazy-loaded folders. Server-paginated
+// (rec.cgi) so we never fetch/send the whole history, only the page actually shown. ----
+function fmtSize(n){ if(n>1048576) return (n/1048576).toFixed(1)+' MB'; if(n>1024) return (n/1024).toFixed(0)+' KB'; return n+' B'; }
+function prettyName(f){ var m=f.match(/_(\d{2})(\d{2})(\d{2})\./); return m? m[1]+':'+m[2]+':'+m[3] : f; }
+function prettyDay(day){ return day.replace(/(\d{4})(\d{2})(\d{2})/,'$3/$2/$1'); }
+function renderClipRow(c){
+  var row=document.createElement('div'); row.className='clip';
+  var isMp4=/\.mp4$/.test(c.file);
+  row.innerHTML='<div class="t"><b>'+prettyName(c.file)+'</b> <small>'+fmtSize(c.size)+'</small></div>'+
+    (isMp4?'<button>▶ Ver</button>':'')+'<a href="'+c.url+'" download>⬇</a>';
+  if(isMp4){ row.querySelector('button').onclick=function(){
+    var ex=row.parentNode.querySelector('video'); if(ex) ex.remove();
+    var v=document.createElement('video'); v.src=c.url; v.controls=true; v.autoplay=true;
+    row.after(v); }; }
+  return row;
+}
+var PAGE_SIZE=30;
+// fetches one page of a day's clips from the server; day='' means "today" (rec.cgi's default)
+function fetchPage(day, offset){
+  var q = day ? ('day='+day+'&') : '';
+  return fetch('/cgi-bin/rec.cgi?'+q+'offset='+offset+'&limit='+PAGE_SIZE).then(function(r){return r.json();});
+}
+// fetches one page of the day-folder list (older days, today excluded server-side)
+function fetchDaysPage(offset){
+  return fetch('/cgi-bin/rec.cgi?list=days&offset='+offset+'&limit='+PAGE_SIZE).then(function(r){return r.json();});
+}
+// generic "render first page + Ver más button that fetches further pages" wiring
+function wirePagingGeneric(host, firstItems, total, renderItem, fetchNext){
+  var shown=firstItems.length;
+  firstItems.forEach(function(it){ host.appendChild(renderItem(it)); });
+  var btn=document.createElement('div'); btn.className='more'; host.appendChild(btn);
+  function refreshBtn(){
+    var left=total-shown;
+    if(left>0){ btn.textContent='Ver más ('+left+' restantes)'; btn.style.display='block'; }
+    else { btn.style.display='none'; }
+  }
+  btn.onclick=function(){
+    fetchNext(shown).then(function(j){
+      total=j.total;
+      var items=j.clips||j.days||[];
+      items.forEach(function(it){ host.insertBefore(renderItem(it), btn); });
+      shown+=items.length;
+      refreshBtn();
+    });
+  };
+  refreshBtn();
+}
+function wirePaging(host, day, firstClips, total){
+  wirePagingGeneric(host, firstClips, total, renderClipRow, function(off){ return fetchPage(day, off); });
+}
+function pollMotion(){
+  fetch('/cgi-bin/health.cgi').then(function(r){return r.json();}).then(function(j){
+    var on = (j.recording === 'yes');
+    document.getElementById('recdot').className='dot'+(on?' on':'');
+    var t=document.getElementById('motiontxt');
+    t.className = on?'on':'';
+    t.textContent = on?'movimiento detectado':'sin movimiento';
+  }).catch(function(){});
+}
+setInterval(pollMotion, 3000); pollMotion();
+function renderDayFolder(d){
+  var wrap=document.createElement('div'); wrap.className='day-entry';
+  var folder=document.createElement('div'); folder.className='day-folder';
+  var arrow=document.createElement('span'); arrow.className='arrow'; arrow.textContent='▸';
+  var lbl=document.createElement('span'); lbl.className='lbl'; lbl.textContent=prettyDay(d.day);
+  var count=document.createElement('small'); count.textContent=d.count+(d.count===1?' grabación':' grabaciones');
+  folder.appendChild(arrow); folder.appendChild(lbl); folder.appendChild(count);
+  var body=document.createElement('div'); body.className='day-body'; body.style.display='none';
+  var loaded=false;
+  folder.onclick=function(){
+    var open=body.style.display!=='none';
+    if(!open && !loaded){
+      loaded=true;
+      fetchPage(d.day, 0).then(function(j2){ wirePaging(body, d.day, j2.clips||[], j2.total); });
+    }
+    body.style.display=open?'none':'flex';
+    arrow.textContent=open?'▸':'▾';
+  };
+  wrap.appendChild(folder); wrap.appendChild(body);
+  return wrap;
+}
+function loadClips(){
+  var host=document.getElementById('clips'); host.innerHTML='';
+  var todayHost=document.createElement('div'); host.appendChild(todayHost);
+  var daysHost=document.createElement('div'); host.appendChild(daysHost);
+  Promise.all([
+    fetchPage('', 0),
+    fetchDaysPage(0)
+  ]).then(function(results){
+    var j=results[0], jd=results[1];
+    document.getElementById('recdot').className='dot'+(j.recording?' on':'');
+    var hasToday=(j.clips&&j.clips.length)>0, hasDays=(jd.days&&jd.days.length)>0;
+    if(!hasToday && !hasDays){ host.innerHTML='<span class="muted">Aún no hay grabaciones.</span>'; return; }
+    if(hasToday){
+      var h=document.createElement('div'); h.className='day';
+      h.textContent=prettyDay(j.today)+' (hoy)'; todayHost.appendChild(h);
+      var flat=document.createElement('div'); flat.className='clips';
+      todayHost.appendChild(flat);
+      wirePaging(flat, '', j.clips, j.total);
+    }
+    if(hasDays){
+      wirePagingGeneric(daysHost, jd.days, jd.total, renderDayFolder, fetchDaysPage);
+    }
+  }).catch(function(){ document.getElementById('clips').innerHTML='<span class="muted">No se pudo leer la lista.</span>'; });
+}
+loadClips(); setInterval(loadClips, 15000);
+
+// ---- misc ----
+document.getElementById('rtsp').textContent='rtsp://'+location.hostname+':554/vs0';
+function clk(){ document.getElementById('clock').textContent=new Date().toLocaleTimeString(); }
+setInterval(clk,1000); clk();
+</script>
+</body>
+</html>
