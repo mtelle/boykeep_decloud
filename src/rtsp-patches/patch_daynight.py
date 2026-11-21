@@ -106,8 +106,19 @@ static void *daynight_th(void *arg)
                 int l2 = -1;
                 ak_vpss_get_cur_lumi(VIDEO_DEV0, &l2);
                 printf("DAYNIGHT: probe without IR, lumi=%d (day if < %d)\n", l2, n2d);
-                if (l2 >= 0 && l2 < n2d) { dn_apply(0); cur = 0; cand = 0; cnt = 0; last_sw = tick; want = 0; }
-                else dn_gpio(DN_IR_LED, 1);
+                if (l2 >= 0 && l2 < n2d) {
+                    /* confirm with a 2nd reading after more settle time - right after the IR LED
+                       turns off, AE/gain can still be ramping from "well lit" to "dark" and give a
+                       transient low (falsely "bright") reading. A single sample was flipping to day
+                       for one beat and straight back to night, and that exposure/IR-cut swing was
+                       itself tripping the motion detector into a false recording. */
+                    ak_sleep_ms(2000);
+                    int l3 = -1;
+                    ak_vpss_get_cur_lumi(VIDEO_DEV0, &l3);
+                    printf("DAYNIGHT: probe confirm, lumi=%d (day if < %d)\n", l3, n2d);
+                    if (l3 >= 0 && l3 < n2d) { dn_apply(0); cur = 0; cand = 0; cnt = 0; last_sw = tick; want = 0; }
+                    else dn_gpio(DN_IR_LED, 1);
+                } else dn_gpio(DN_IR_LED, 1);
             }
             need = cur < 0 ? 1 : 3;           /* 3 consecutive seconds before switching */
             if (cur >= 0 && want != cur && tick - last_sw < 30) want = cur;   /* minimum 30 s per state */
