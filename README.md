@@ -1,6 +1,6 @@
-# BoyKeep K30 - Z21S / Anyka AK3918EV300L — De-cloud
+# BoyKeep K30 - Z21S / Anyka AK3918EV300L — Decloud
 
-Full de-cloud of a cheap WiFi PTZ camera built on the **Anyka AK3918EV300L** SoC
+Full decloud of a cheap WiFi PTZ camera built on the **Anyka AK3918EV300L** SoC
 (board `Z21S_MB_V2_0B`, **GC2083** sensor, **ATBM6132** WiFi). It replaces the stock cloud app
 with a **fully local** stack: a self-hosted RTSP server, **hardware motion detection** with
 **MP4** recording, **PTZ** control, a **web UI** (live view + camera control + recordings),
