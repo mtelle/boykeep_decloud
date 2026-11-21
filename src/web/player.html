@@ -5,14 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Grabación</title>
 <style>
-  :root{ --bg:#0f1115; --fg:#e8eaed; --mut:#9aa0ab; --acc:#3b82f6; }
-  *{ box-sizing:border-box; }
-  body{ margin:0; background:var(--bg); color:var(--fg); font:15px/1.4 system-ui,Segoe UI,Roboto,sans-serif;
-        display:flex; flex-direction:column; align-items:center; padding:16px; min-height:100vh; }
-  video{ width:100%; max-width:900px; border-radius:10px; background:#000; }
-  .bar{ width:100%; max-width:900px; display:flex; align-items:center; gap:10px; margin-top:10px; }
+  :root{
+    --bg:#0a0c11; --panel-2:#1b1f2a; --line:#262b38; --fg:#eceef2; --mut:#8b93a3; --acc:#3b82f6;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body{ margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui,Segoe UI,Roboto,sans-serif;
+        display:flex; flex-direction:column; align-items:center; padding:20px 16px; min-height:100vh; }
+  video{ width:100%; max-width:900px; border-radius:12px; background:#000; box-shadow:0 10px 28px -14px rgba(0,0,0,.6); }
+  .bar{ width:100%; max-width:900px; display:flex; align-items:center; gap:10px; margin-top:12px; }
   .name{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--mut); font-size:13px; }
-  a.dl, a.home{ color:var(--acc); text-decoration:none; font-size:14px; flex:0 0 auto; }
+  a.dl, a.home{ color:var(--acc); text-decoration:none; font-size:13px; font-weight:600; flex:0 0 auto;
+                padding:7px 12px; border-radius:9px; background:var(--panel-2); border:1px solid var(--line); transition:.15s; }
+  a.dl:hover, a.home:hover{ border-color:#3a4155; background:#20242f; }
   .err{ color:var(--mut); margin-top:40px; text-align:center; }
 </style>
 </head>
