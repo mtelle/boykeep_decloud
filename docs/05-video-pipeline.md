@@ -30,10 +30,41 @@ and those of the upstream project):
 |---|---|
 | `patch_motion.py` | **(this repo)** motion detection + MP4 muxer to the SD |
 | `patch_snapshot.py` | JPEG thread (snapshot ~N fps) for the web live view |
-| `patch_daynight.py` | automatic day/night (IR-cut, IR LEDs, ISP profile) by luminance |
+| `patch_daynight.py` | automatic day/night (IR-cut, IR LEDs, ISP profile) - see below |
 | `patch_noaudio.py` | no audio track (a dead track stalls `librtsp_server`) |
 | `patch_enc_type.py` | codec override from the `.ini` |
 | `patch_ip.py` | announce the `wlan0` IP instead of a hard-coded one |
+
+### Day/night (`patch_daynight.py`)
+
+This board has no light sensor: the ADC channel the stock `base_para.ini` points at
+(`in_voltage1_raw`) is the unpopulated battery divider and reads a constant ~3115. The SDK's
+`ak_vpss_get_auto_day_night_level` never proposed night on this unit. So the thread decides from
+the ISP itself:
+
+- **Day → night:** the ISP luminance index (`ak_vpss_get_cur_lumi`, high = dark; daylight ~100,
+  dark ~54575, which is the ceiling) above `DN_D2N` (3584) for `DN_D2N_S` (10) s.
+- **Night → day:** in night mode that index is useless - the night ISP profile plus our own IR
+  LEDs read ~9 in a pitch-dark room, lower than daylight. The decision is an **IR-off probe**: IR
+  LEDs off and the day profile loaded for up to `DN_PROBE_MS` (4000) ms. It goes to day only if the
+  *highest* reading stays below `DN_N2D` (1536). Taking the maximum defeats AE lag, and the probe
+  stops as soon as it reads > `DN_D2N`, so in the dark it is a sub-second blip.
+- **When to probe:** this is the stock firmware's `SoftPhotosensitive` idea. Under pure IR the
+  sensor's R, G and B averages (`ak_vpss_get_rgb_average`) are nearly equal (measured R/G =
+  B/G = 104-105), and visible light shifts that ratio (a warm lamp: B/G 105 → 89). After entering
+  night the thread learns the current colour. A shift of `DN_COLOR` (8) points sustained for
+  `DN_COLOR_S` (20) s probes at once, so in real darkness there is no blip at all. A probe that
+  finds it still dark re-learns the colour, so a dim lamp probes once, not every 20 s. A fallback
+  probe runs every `DN_PROBE` (1800) s, for light that does not shift the colour.
+- `DN_HOLD` (60) s minimum per state; the boot-time decision does not start it.
+- While switching or probing, `/tmp/daynight.busy` exists and motion detection ignores the frames
+  (plus 4 s), so the image jump does not start a recording.
+
+Manual override: `echo day|night|auto > /tmp/daynight.mode`. `/tmp/daynight.log` shows `lumi`,
+`rg`/`bg`, the learnt `base`, `dev`/`ccnt` (colour shift and how long it has lasted) and the last
+`probe` value. `/tmp/rtsp.log` has one `DAYNIGHT: probe (color|timer, ...)` line per probe.
+`DN_COLOR=0` disables the colour trigger (then set `DN_PROBE=300`), and `DN=0` disables the whole
+thread.
 
 ## Streams (`deploy/rtsp.ini`)
 

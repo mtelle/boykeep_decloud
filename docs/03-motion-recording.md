@@ -57,6 +57,9 @@ The SDK filter thresholds are tunable without rebuilding: `MD_MRD_BIG`/`MD_MRD_S
 `MD_MRD=0` falls back to the original plain count: blocks above `MD_CELL_TH`, `MD_MIN_CELLS` or
 more → motion. Either way a **tail** (`MD_HOLD` s) keeps recording after motion stops.
 `/tmp/motion.level` shows both: `level`/`peak` (plain count) and `boxes`/`area` (regions).
+While `/tmp/daynight.busy` exists (a day/night switch or IR-off probe, see
+[05-video-pipeline.md](05-video-pipeline.md#daynight-patch_daynightpy)), plus 4 s, motion is
+ignored, because the whole image jumps.
 
 ### Tuning: a static scene can still trigger constantly
 

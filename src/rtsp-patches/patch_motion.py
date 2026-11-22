@@ -674,6 +674,7 @@ static void *motion_th(void *arg)
     if (use_mrd)
         printf("MOTION: mrd %s (rows=%d min=%d)\n", mrd ? "on" : "init FAILED, plain count", rows, mrd_min);
     int mrd_night = -1, seen_rows = 0;
+    long long dn_quiet_until = 0;
     int was = 0;
     ak_sleep_ms(4000);
     for (;;) {
@@ -704,6 +705,9 @@ static void *motion_th(void *arg)
         } else if (r == 0) {
             motion = active >= min_cell;
         }
+        /* day/night switch or IR-off probe in progress: the whole image jumps, not motion */
+        if (access("/tmp/daynight.busy", F_OK) == 0) dn_quiet_until = md_now_ms() + 4000;
+        if (md_now_ms() < dn_quiet_until) motion = 0;
         g_md_level = active;
         if (motion)
             g_md_rec_until = md_now_ms() + (long long)hold_s*1000;

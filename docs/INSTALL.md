@@ -294,7 +294,8 @@ Configured by environment variables in `start.sh` (section `2b`). Detection uses
 cat /tmp/rtsp.log         # RTSP / encoder / ISP startup
 cat /tmp/motion.level     # motion detection state
 cat /tmp/timesync.log     # time sync
-cat /tmp/daynight.log     # day/night (luminance, IR state)
+cat /tmp/daynight.log     # day/night (luminance, colour shift, last IR-off probe)
+grep DAYNIGHT /tmp/rtsp.log   # day/night switches and probes
 ps | grep -E 'rtspd|httpd|dropbear|viCam'
 ls -l /mnt/sdcard/rec/*/  # recordings
 ```
