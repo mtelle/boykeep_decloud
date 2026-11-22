@@ -54,6 +54,14 @@ flickering ones, using the day/night parameter sets from the SDK's own sample
 The SDK filter thresholds are tunable without rebuilding: `MD_MRD_BIG`/`MD_MRD_SMALL` (day,
 12000/6000) and `MD_MRD_BIG_N`/`MD_MRD_SMALL_N` (night, 15000/10000).
 
+`libak_mrd` deliberately drops whole-frame changes (lighting, auto-exposure). That also dropped
+the most important night case. A person close to the camera reflects the IR, the AE re-exposes
+the whole image, and nearly all 768 cells change at once (measured: 700-764 cells, peak 65535)
+while mrd returns 0 boxes. So **`MD_GLOBAL` (150) or more cells above `MD_GLOBAL_TH` (1600) in 2
+consecutive samples also count as motion**. Static IR noise peaks around 350, well below 1600.
+Switching a room light on or off therefore records too. `/tmp/motion.level` shows it as
+`glob=N/150`. `MD_GLOBAL=0` disables it.
+
 `MD_MRD=0` falls back to the original plain count: blocks above `MD_CELL_TH`, `MD_MIN_CELLS` or
 more → motion. Either way a **tail** (`MD_HOLD` s) keeps recording after motion stops.
 `/tmp/motion.level` shows both: `level`/`peak` (plain count) and `boxes`/`area` (regions).

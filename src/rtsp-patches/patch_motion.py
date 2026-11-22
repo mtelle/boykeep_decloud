@@ -673,6 +673,7 @@ static void *motion_th(void *arg)
     void *mrd = use_mrd ? ak_mrd_init() : NULL;
     if (use_mrd)
         printf("MOTION: mrd %s (rows=%d min=%d)\n", mrd ? "on" : "init FAILED, plain count", rows, mrd_min);
+    int glob = md_env_i("MD_GLOBAL", 150), glob_th = md_env_i("MD_GLOBAL_TH", 1600), gcnt = 0;
     int mrd_night = -1, seen_rows = 0;
     long long dn_quiet_until = 0;
     int was = 0;
@@ -680,13 +681,14 @@ static void *motion_th(void *arg)
     for (;;) {
         memset(grid, 0, sizeof(unsigned short)*MD_W*MD_H);
         int r = ak_vpss_md_get_stat(VIDEO_DEV0, grid);
-        int active = 0, peak = 0, nbox = 0, area = 0, i, j;
+        int active = 0, gact = 0, peak = 0, nbox = 0, area = 0, i, j;
         if (r == 0) {
             for (i = 0; i < MD_H; i++)
                 for (j = 0; j < MD_W; j++) {
                     int v = grid[i][j];
                     if (v > peak) peak = v;
                     if (v > cell_th) active++;
+                    if (v > glob_th) gact++;
                     if (v && i >= seen_rows) seen_rows = i + 1;
                 }
         }
@@ -702,6 +704,14 @@ static void *motion_th(void *arg)
                 if (a > area) area = a;
             }
             motion = nbox > 0;
+            /* libak_mrd deliberately drops whole-frame changes (lighting/AE). At night a person
+               close to the camera reflects our IR, the AE re-exposes and ~all 768 cells change at
+               once (measured: 700-764 cells, peak 65535, static IR noise peak ~350) - mrd returns
+               0 boxes for exactly that case. MD_GLOBAL (150) or more cells above MD_GLOBAL_TH
+               (1600) for 2 consecutive samples count as motion anyway; day/night switches and
+               IR-off probes are still excluded through /tmp/daynight.busy below. MD_GLOBAL=0 off. */
+            gcnt = (glob > 0 && gact >= glob) ? gcnt + 1 : 0;
+            if (gcnt >= 2) motion = 1;
         } else if (r == 0) {
             motion = active >= min_cell;
         }
@@ -721,9 +731,9 @@ static void *motion_th(void *arg)
         was = on;
 
         FILE *lg = fopen("/tmp/motion.level", "w");
-        if (lg) { fprintf(lg, "level=%d peak=%d th=%d need=%d state=%s ret=%d mrd=%d boxes=%d area=%d rows=%d/%d\n",
+        if (lg) { fprintf(lg, "level=%d peak=%d th=%d need=%d state=%s ret=%d mrd=%d boxes=%d area=%d rows=%d/%d glob=%d/%d\n",
                           active, peak, cell_th, min_cell, on ? "REC" : "idle", r,
-                          mrd ? 1 : 0, nbox, area, seen_rows, rows); fclose(lg); }
+                          mrd ? 1 : 0, nbox, area, seen_rows, rows, gact, glob); fclose(lg); }
         ak_sleep_ms(period);
     }
     return NULL;
