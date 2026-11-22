@@ -3,8 +3,12 @@ import sys
 #                   + AAC AUDIO track (mic), interleaved A/V, 2-track ISO-BMFF muxer.
 #
 # Detection: ak_vpss_md_get_stat(VIDEO_DEV0) returns a per-block u16 motion grid (ISP hardware,
-#   no enable needed - same source the stock viCam used). Blocks over MD_CELL_TH are counted;
-#   >= MD_MIN_CELLS => motion. A post-motion tail (MD_HOLD s) keeps recording after it stops.
+#   no enable needed - same source the stock viCam used). By default (MD_MRD=1) the grid goes
+#   through libak_mrd - the stock viCam's own region analyzer: it groups active cells into regions
+#   and drops small, isolated or flickering ones (day/night parameter sets from the SDK sample,
+#   switched with /tmp/daynight.state); motion = at least one region of >= MD_MRD_MIN cells.
+#   MD_MRD=0 falls back to the plain count: blocks over MD_CELL_TH, >= MD_MIN_CELLS => motion.
+#   A post-motion tail (MD_HOLD s) keeps recording after it stops.
 #
 # Recording: tees the already-encoded VIDEO frames of ONE stream (MD_CHN) AND the encoded AAC
 #   audio frames (md_audio_feed, fed from the rtsp audio thread) into a self-contained .mp4.
@@ -19,6 +23,8 @@ import sys
 #   that many days are deleted.  MD_FMT=raw writes a raw .h264/.h265 (diagnostic, no audio).
 # Flags in /tmp: motion.active (while recording), motion.rec (current file), motion.level (score).
 # Env: MD=0 disables. MD_FMT(mp4|raw) MD_CHN(0|1) MD_CELL_TH MD_MIN_CELLS MD_HOLD MD_PERIOD(ms)
+#      MD_MRD(1) MD_MRD_MIN(6) MD_ROWS(24, grid rows) MD_MRD_BIG/_SMALL (day filters, 12000/6000)
+#      MD_MRD_BIG_N/_SMALL_N (night filters, 15000/10000)
 #      MD_MAXCLIP(s) MD_MINFREE(MB) MD_KEEPDAYS(0=off) MD_AUDIO(1) MD_DIR MD_HOOK(cmd on motion).
 p = sys.argv[1]
 s = open(p, encoding='latin-1').read()
@@ -50,6 +56,17 @@ int ak_vpss_md_get_stat(int dev, void *md);
 #define VIDEO_DEV0 0
 #endif
 #define MD_MAXSAMP 18000
+
+/* libak_mrd (/opt/vicam/libak_mrd.so, the camera's own copy). Prototypes from ak_mrd.h. */
+typedef struct { int left, top, right, bottom, count; } MD_MRD_RECT;
+#define MD_MRD_CAP 20
+void *ak_mrd_init(void);
+int ak_mrd_set_filters(void *h, unsigned short flt_big, unsigned short flt_small);
+int ak_mrd_set_motion_region_size(void *h, int size_min, int size_max);
+int ak_mrd_set_mode(void *h, unsigned char mode);
+int ak_mrd_set_floating_wadding_params(void *h, int m_frames, int s_frames, int extra_frames,
+                                       int dis, int m_width, int m_height);
+int ak_mrd(void *h, unsigned short md[][MD_W], int len, MD_MRD_RECT boxes[MD_MRD_CAP]);
 
 static volatile long long g_md_rec_until = 0;    /* monotonic ms: record while now < this */
 static volatile int       g_md_level     = 0;
@@ -615,6 +632,28 @@ void md_record_feed(int dev_id, int chn, int enc_type, int w, int h, struct vide
     ak_thread_mutex_unlock(&g_mux_lock);
 }
 
+/* parameter sets from the SDK's own mrd sample (platform/sample/mt), day vs night */
+static void md_mrd_config(void *h, int night, int size_min, int size_max)
+{
+    if (night) {
+        ak_mrd_set_mode(h, 0);
+        ak_mrd_set_floating_wadding_params(h, 4, 2, 4, 9, 2, 3);
+        ak_mrd_set_filters(h, md_env_i("MD_MRD_BIG_N", 15000), md_env_i("MD_MRD_SMALL_N", 10000));
+    } else {
+        ak_mrd_set_mode(h, 1);
+        ak_mrd_set_floating_wadding_params(h, 3, 2, 4, 36, 2, 3);
+        ak_mrd_set_filters(h, md_env_i("MD_MRD_BIG", 12000), md_env_i("MD_MRD_SMALL", 6000));
+    }
+    ak_mrd_set_motion_region_size(h, size_min, size_max);
+}
+static int md_is_night(void)
+{
+    char b[8] = "";
+    FILE *f = fopen("/tmp/daynight.state", "r");
+    if (f) { if (!fgets(b, sizeof(b), f)) b[0] = 0; fclose(f); }
+    return !strncmp(b, "night", 5);
+}
+
 static void *motion_th(void *arg)
 {
     (void)arg;
@@ -625,24 +664,48 @@ static void *motion_th(void *arg)
     int cell_th  = md_env_i("MD_CELL_TH", 80);
     int min_cell = md_env_i("MD_MIN_CELLS", 6);
     int hold_s   = md_env_i("MD_HOLD", 8);
-    int period   = md_env_i("MD_PERIOD", 300);
+    int use_mrd  = md_env_i("MD_MRD", 1);
+    int rows     = md_env_i("MD_ROWS", 24);
+    int mrd_min  = md_env_i("MD_MRD_MIN", 6);
+    int period   = md_env_i("MD_PERIOD", use_mrd ? 100 : 300);   /* mrd filters across frames */
+    if (rows < 1 || rows > MD_H) rows = 24;
     const char *hook = getenv("MD_HOOK");
+    void *mrd = use_mrd ? ak_mrd_init() : NULL;
+    if (use_mrd)
+        printf("MOTION: mrd %s (rows=%d min=%d)\n", mrd ? "on" : "init FAILED, plain count", rows, mrd_min);
+    int mrd_night = -1, seen_rows = 0;
     int was = 0;
     ak_sleep_ms(4000);
     for (;;) {
         memset(grid, 0, sizeof(unsigned short)*MD_W*MD_H);
         int r = ak_vpss_md_get_stat(VIDEO_DEV0, grid);
-        int active = 0, peak = 0, i, j;
+        int active = 0, peak = 0, nbox = 0, area = 0, i, j;
         if (r == 0) {
             for (i = 0; i < MD_H; i++)
                 for (j = 0; j < MD_W; j++) {
                     int v = grid[i][j];
                     if (v > peak) peak = v;
                     if (v > cell_th) active++;
+                    if (v && i >= seen_rows) seen_rows = i + 1;
                 }
         }
+        int motion = 0;
+        if (r == 0 && mrd) {
+            int night = md_is_night();
+            if (night != mrd_night) { md_mrd_config(mrd, night, mrd_min, MD_W * rows); mrd_night = night; }
+            MD_MRD_RECT boxes[MD_MRD_CAP];
+            memset(boxes, 0, sizeof(boxes));
+            nbox = ak_mrd(mrd, grid, rows, boxes);
+            for (i = 0; i < nbox && i < MD_MRD_CAP; i++) {
+                int a = (boxes[i].right - boxes[i].left) * (boxes[i].bottom - boxes[i].top);
+                if (a > area) area = a;
+            }
+            motion = nbox > 0;
+        } else if (r == 0) {
+            motion = active >= min_cell;
+        }
         g_md_level = active;
-        if (r == 0 && active >= min_cell)
+        if (motion)
             g_md_rec_until = md_now_ms() + (long long)hold_s*1000;
 
         int on = md_now_ms() < g_md_rec_until;
@@ -654,8 +717,9 @@ static void *motion_th(void *arg)
         was = on;
 
         FILE *lg = fopen("/tmp/motion.level", "w");
-        if (lg) { fprintf(lg, "level=%d peak=%d th=%d need=%d state=%s ret=%d\n",
-                          active, peak, cell_th, min_cell, on ? "REC" : "idle", r); fclose(lg); }
+        if (lg) { fprintf(lg, "level=%d peak=%d th=%d need=%d state=%s ret=%d mrd=%d boxes=%d area=%d rows=%d/%d\n",
+                          active, peak, cell_th, min_cell, on ? "REC" : "idle", r,
+                          mrd ? 1 : 0, nbox, area, seen_rows, rows); fclose(lg); }
         ak_sleep_ms(period);
     }
     return NULL;

@@ -67,13 +67,30 @@
         <span class="en">Turns motion detection fully on or off.</span></span>
       </label><label class="sw"><input type="checkbox" id="MD"><span class="sl"></span></label></div>
 
+    <div class="row"><label>Filtro de regiones
+      <span class="desc">Usa el analizador de regiones del firmware original: agrupa las celdas en
+        movimiento en zonas y descarta las pequeñas, aisladas o que parpadean (luces, ruido nocturno).
+        Muchos menos falsos disparos. Con él activado, «Umbral por celda» y «Celdas para disparar»
+        no se usan.
+        <span class="en">Uses the stock firmware's region analyzer: groups moving cells into regions
+          and drops small, isolated or flickering ones. Far fewer false triggers. When on, "cell
+          threshold" and "cells to trigger" are not used.</span></span>
+      </label><label class="sw"><input type="checkbox" id="MD_MRD"><span class="sl"></span></label></div>
+
+    <div class="row"><label>Tamaño mínimo de región
+      <span class="desc">Celdas que debe ocupar una zona en movimiento para grabar (la rejilla es de
+        32×24). Mayor = ignora objetos más pequeños o lejanos. Para mascotas en un salón, 4–8.
+        <span class="en">Cells a moving region must cover to record (the grid is 32×24). Higher =
+          ignores smaller or farther objects. For pets in a living room, 4–8.</span></span>
+      </label><input type="number" id="MD_MRD_MIN" min="1" max="300"></div>
+
     <div class="row"><label>Umbral por celda
       <span class="desc">La imagen se divide en una rejilla; cada celda puntúa cuánto ha cambiado entre
         fotogramas. Este valor es el umbral que una celda debe superar para contar. Mayor = hace falta
         más cambio por celda = menos sensible.
         <span class="en">The frame is split into a grid; each cell scores how much it changed between
           frames. This is the threshold a cell must exceed to count. Higher = less sensitive.</span></span>
-      </label><input type="number" id="MD_CELL_TH" min="0" max="1000"></div>
+      </label><input type="number" id="MD_CELL_TH" min="0" max="5000"></div>
 
     <div class="row"><label>Celdas para disparar
       <span class="desc">Cuántas celdas deben superar el umbral a la vez para considerar que hay
@@ -164,8 +181,8 @@
       boot without rebooting now.</span></p>
 </main>
 <script>
-var BOOL=['MD','MD_AUDIO','OSD'];
-var NUM=['MD_CELL_TH','MD_MIN_CELLS','MD_HOLD','MD_MAXCLIP','MD_MINFREE','MD_KEEPDAYS','OSD_X','OSD_Y','OSD_SCALE','OSD_ALPHA'];
+var BOOL=['MD','MD_MRD','MD_AUDIO','OSD'];
+var NUM=['MD_MRD_MIN','MD_CELL_TH','MD_MIN_CELLS','MD_HOLD','MD_MAXCLIP','MD_MINFREE','MD_KEEPDAYS','OSD_X','OSD_Y','OSD_SCALE','OSD_ALPHA'];
 function setMsg(t,warn){ var m=document.getElementById('msg'); m.textContent=t; m.style.color=warn?'var(--warn)':'var(--ok)'; }
 function load(){
   fetch('/cgi-bin/config.cgi').then(function(r){return r.json();}).then(function(j){

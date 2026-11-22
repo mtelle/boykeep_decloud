@@ -33,7 +33,7 @@ python3 $REPO/rtsp/patch_osd.py ak_rtsp_stream.c             # burned-in date/ti
 for f in ak_rtsp_server_sample.c ak_rtsp_stream.c aas_ini_parser.c; do
     $GCC -march=armv5te -mtune=arm926ej-s -Os -std=gnu99 -D_GNU_SOURCE -D__CHIP_AK3918EV300L_SERIES -I. -I$SDK/platform/include -c $f -o ${f%.c}.o
 done
-L="-lrtsp_server -lplat_common -lplat_vi -lmpi_venc -lmpi_aenc -lakaac -lakaudiocodec -lplat_ai -lplat_ao -lplat_vqe -lplat_vpss -lplat_isp_sdk -lplat_mem -lplat_osal -lplat_thread -lplat_log -lplat_dbg -lplat_timer -lakaudiofilter -lapp_video -lmpi_osd -lapp_osd_ex -lapp_its"
+L="-lrtsp_server -lplat_common -lplat_vi -lmpi_venc -lmpi_aenc -lakaac -lakaudiocodec -lplat_ai -lplat_ao -lplat_vqe -lplat_vpss -lplat_isp_sdk -lplat_mem -lplat_osal -lplat_thread -lplat_log -lplat_dbg -lplat_timer -lakaudiofilter -lapp_video -lmpi_osd -lapp_osd_ex -lapp_its -lak_mrd"
 # $LIBS_DIR first (camera libs, incl. its libplat_common with ai/ao/vqe_mux); -rpath-link,lib lets
 # ld resolve libakaac's NEEDED libakaudiocodec. tAencMux is provided by our own object (patch_audio).
 $GCC -march=armv5te -o rtspd *.o -L$LIBS_DIR -Llib -Wl,-rpath-link,lib -Wl,--start-group $L -Wl,--end-group -lpthread -ldl -lm -lrt -Wl,-rpath,/opt/vicam

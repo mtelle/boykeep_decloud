@@ -44,10 +44,19 @@ the result is correct whatever the real height is, and there is **never an overf
 
 ### Detection logic (patch)
 
-Every `MD_PERIOD` ms: read the grid → count blocks above `MD_CELL_TH` → if `MD_MIN_CELLS` or more,
-there is motion. A **tail** (`MD_HOLD` s) keeps recording after motion stops. The region analyzer
-`libak_mrd.so` (also present on the camera) is available as an upgrade (zones and noise filtering,
-as in the stock app).
+Every `MD_PERIOD` ms (100 by default) the grid goes through **`libak_mrd`**, the same region
+analyzer the stock `viCam` uses (linked against the camera's own `/opt/vicam/libak_mrd.so`,
+nothing vendor-made is shipped). It groups active cells into regions and drops small, isolated or
+flickering ones, using the day/night parameter sets from the SDK's own sample
+(`platform/sample/mt`), switched by `/tmp/daynight.state`. Motion = at least one region of
+`MD_MRD_MIN` cells or more (default 6). The grid is passed to it as `MD_ROWS` rows × 32 (default
+24, the av130-family layout); `/tmp/motion.level` reports the rows actually seen as `rows=X/24`.
+The SDK filter thresholds are tunable without rebuilding: `MD_MRD_BIG`/`MD_MRD_SMALL` (day,
+12000/6000) and `MD_MRD_BIG_N`/`MD_MRD_SMALL_N` (night, 15000/10000).
+
+`MD_MRD=0` falls back to the original plain count: blocks above `MD_CELL_TH`, `MD_MIN_CELLS` or
+more → motion. Either way a **tail** (`MD_HOLD` s) keeps recording after motion stops.
+`/tmp/motion.level` shows both: `level`/`peak` (plain count) and `boxes`/`area` (regions).
 
 ### Tuning: a static scene can still trigger constantly
 
