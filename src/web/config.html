@@ -67,6 +67,26 @@
         <span class="en">Turns motion detection fully on or off.</span></span>
       </label><label class="sw"><input type="checkbox" id="MD"><span class="sl"></span></label></div>
 
+    <div class="row"><label>Algoritmo del firmware original
+      <span class="desc">Usa la misma regla de alarma que la app original: cuenta qué porcentaje de la
+        imagen cambia con fuerza y lo compara con la «Sensibilidad». Detecta igual de bien de día y
+        de noche, también a alguien muy cerca, pero encender o apagar una luz también graba. Con él
+        activado, el «Filtro de regiones» y los umbrales de abajo no se usan.
+        <span class="en">Uses the original app's alarm rule: counts what percentage of the image
+          changes strongly and compares it with "Sensitivity". Works the same by day and night,
+          including someone very close, but switching a light on or off also records. When on,
+          "region filter" and the thresholds below are not used.</span></span>
+      </label><label class="sw"><input type="checkbox" id="MD_STOCK"><span class="sl"></span></label></div>
+
+    <div class="row"><label>Sensibilidad
+      <span class="desc">Como el control de la app original (0–100), solo con el algoritmo del firmware
+        original. Parte de la imagen que debe cambiar para grabar: 50 ≈ 17 %, 80 ≈ 8 %,
+        90 ≈ 6 %, 100 ≈ 2 %. Mayor = más sensible.
+        <span class="en">Like the original app's slider (0–100), only with the original firmware
+          algorithm. Share of the image that must change to record: 50 ≈ 17%, 80 ≈ 8%, 90 ≈ 6%,
+          100 ≈ 2%. Higher = more sensitive.</span></span>
+      </label><input type="number" id="MD_SENS" min="0" max="100"></div>
+
     <div class="row"><label>Filtro de regiones
       <span class="desc">Usa el analizador de regiones del firmware original: agrupa las celdas en
         movimiento en zonas y descarta las pequeñas, aisladas o que parpadean (luces, ruido nocturno).
@@ -181,8 +201,8 @@
       boot without rebooting now.</span></p>
 </main>
 <script>
-var BOOL=['MD','MD_MRD','MD_AUDIO','OSD'];
-var NUM=['MD_MRD_MIN','MD_CELL_TH','MD_MIN_CELLS','MD_HOLD','MD_MAXCLIP','MD_MINFREE','MD_KEEPDAYS','OSD_X','OSD_Y','OSD_SCALE','OSD_ALPHA'];
+var BOOL=['MD','MD_STOCK','MD_MRD','MD_AUDIO','OSD'];
+var NUM=['MD_SENS','MD_MRD_MIN','MD_CELL_TH','MD_MIN_CELLS','MD_HOLD','MD_MAXCLIP','MD_MINFREE','MD_KEEPDAYS','OSD_X','OSD_Y','OSD_SCALE','OSD_ALPHA'];
 function setMsg(t,warn){ var m=document.getElementById('msg'); m.textContent=t; m.style.color=warn?'var(--warn)':'var(--ok)'; }
 function load(){
   fetch('/cgi-bin/config.cgi').then(function(r){return r.json();}).then(function(j){

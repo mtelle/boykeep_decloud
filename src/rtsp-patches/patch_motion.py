@@ -8,6 +8,9 @@ import sys
 #   and drops small, isolated or flickering ones (day/night parameter sets from the SDK sample,
 #   switched with /tmp/daynight.state); motion = at least one region of >= MD_MRD_MIN cells.
 #   MD_MRD=0 falls back to the plain count: blocks over MD_CELL_TH, >= MD_MIN_CELLS => motion.
+#   MD_STOCK=1 instead uses the stock viCam ALARM rule (reverse-engineered from MotionDetect.cpp -
+#   libak_mrd is only its PTZ tracker): % of cells >= MD_STOCK_TH (5120) vs a threshold from
+#   MD_SENS (0-100, like the app slider: 50 ~17%, 80 ~8%, 90 ~6%, 100 ~2% of the frame).
 #   A post-motion tail (MD_HOLD s) keeps recording after it stops.
 #
 # Recording: tees the already-encoded VIDEO frames of ONE stream (MD_CHN) AND the encoded AAC
@@ -24,7 +27,8 @@ import sys
 # Flags in /tmp: motion.active (while recording), motion.rec (current file), motion.level (score).
 # Env: MD=0 disables. MD_FMT(mp4|raw) MD_CHN(0|1) MD_CELL_TH MD_MIN_CELLS MD_HOLD MD_PERIOD(ms)
 #      MD_MRD(1) MD_MRD_MIN(6) MD_ROWS(24, grid rows) MD_MRD_BIG/_SMALL (day filters, 12000/6000)
-#      MD_MRD_BIG_N/_SMALL_N (night filters, 15000/10000)
+#      MD_MRD_BIG_N/_SMALL_N (night filters, 15000/10000) MD_GLOBAL(150)/MD_GLOBAL_TH(1600)
+#      MD_STOCK(0) MD_SENS(80) MD_STOCK_TH(5120)
 #      MD_MAXCLIP(s) MD_MINFREE(MB) MD_KEEPDAYS(0=off) MD_AUDIO(1) MD_DIR MD_HOOK(cmd on motion).
 p = sys.argv[1]
 s = open(p, encoding='latin-1').read()
@@ -667,8 +671,28 @@ static void *motion_th(void *arg)
     int use_mrd  = md_env_i("MD_MRD", 1);
     int rows     = md_env_i("MD_ROWS", 24);
     int mrd_min  = md_env_i("MD_MRD_MIN", 6);
-    int period   = md_env_i("MD_PERIOD", use_mrd ? 100 : 300);   /* mrd filters across frames */
+    /* MD_STOCK=1: the stock viCam alarm rule (MotionDetect.cpp, reverse-engineered): a cell is
+       active when its value >= MD_STOCK_TH (5120, i.e. (v>>8) >= 20); motion when
+       active/total * S*10000 >= B^2, S = MD_SENS (0-100, the app's sensitivity slider) and B the
+       stock bucket for it (<=49: 322, 50-79: 289, 80-89: 256, 90-99: 224, 100: 145). Over the
+       whole frame (the stock app applies it per user-drawn zone). No whole-frame rejection, no
+       libak_mrd. Sampled every 250 ms like the stock loop. Overrides MD_MRD. */
+    int stock    = md_env_i("MD_STOCK", 0);
+    int sens     = md_env_i("MD_SENS", 80);
+    int stock_th = md_env_i("MD_STOCK_TH", 5120);
+    if (sens < 0) sens = 0;
+    if (sens > 100) sens = 100;
+    int bucket = sens >= 100 ? 145 : sens >= 90 ? 224 : sens >= 80 ? 256 : sens >= 50 ? 289 : 322;
+    if (stock) use_mrd = 0;
+    int period   = md_env_i("MD_PERIOD", stock ? 250 : use_mrd ? 100 : 300);   /* mrd filters across frames */
     if (rows < 1 || rows > MD_H) rows = 24;
+    /* cells needed = ceil(B^2 * total / (S*10000)); S=0 never triggers */
+    long long st_need = sens > 0
+        ? ((long long)bucket * bucket * MD_W * rows + (long long)sens * 10000 - 1) / ((long long)sens * 10000)
+        : (long long)MD_W * rows + 1;
+    if (stock)
+        printf("MOTION: stock rule (sens=%d bucket=%d -> %lld of %d cells >= %d)\n",
+               sens, bucket, st_need, MD_W * rows, stock_th);
     const char *hook = getenv("MD_HOOK");
     void *mrd = use_mrd ? ak_mrd_init() : NULL;
     if (use_mrd)
@@ -681,7 +705,7 @@ static void *motion_th(void *arg)
     for (;;) {
         memset(grid, 0, sizeof(unsigned short)*MD_W*MD_H);
         int r = ak_vpss_md_get_stat(VIDEO_DEV0, grid);
-        int active = 0, gact = 0, peak = 0, nbox = 0, area = 0, i, j;
+        int active = 0, gact = 0, sact = 0, peak = 0, nbox = 0, area = 0, i, j;
         if (r == 0) {
             for (i = 0; i < MD_H; i++)
                 for (j = 0; j < MD_W; j++) {
@@ -689,11 +713,14 @@ static void *motion_th(void *arg)
                     if (v > peak) peak = v;
                     if (v > cell_th) active++;
                     if (v > glob_th) gact++;
+                    if (i < rows && v >= stock_th) sact++;
                     if (v && i >= seen_rows) seen_rows = i + 1;
                 }
         }
         int motion = 0;
-        if (r == 0 && mrd) {
+        if (r == 0 && stock) {
+            motion = sact >= st_need;
+        } else if (r == 0 && mrd) {
             int night = md_is_night();
             if (night != mrd_night) { md_mrd_config(mrd, night, mrd_min, MD_W * rows); mrd_night = night; }
             MD_MRD_RECT boxes[MD_MRD_CAP];
@@ -731,9 +758,10 @@ static void *motion_th(void *arg)
         was = on;
 
         FILE *lg = fopen("/tmp/motion.level", "w");
-        if (lg) { fprintf(lg, "level=%d peak=%d th=%d need=%d state=%s ret=%d mrd=%d boxes=%d area=%d rows=%d/%d glob=%d/%d\n",
+        if (lg) { fprintf(lg, "level=%d peak=%d th=%d need=%d state=%s ret=%d mrd=%d boxes=%d area=%d rows=%d/%d glob=%d/%d stock=%d/%lld\n",
                           active, peak, cell_th, min_cell, on ? "REC" : "idle", r,
-                          mrd ? 1 : 0, nbox, area, seen_rows, rows, gact, glob); fclose(lg); }
+                          mrd ? 1 : 0, nbox, area, seen_rows, rows, gact, glob,
+                          sact, stock ? st_need : 0LL); fclose(lg); }
         ak_sleep_ms(period);
     }
     return NULL;

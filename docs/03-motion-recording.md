@@ -44,9 +44,9 @@ the result is correct whatever the real height is, and there is **never an overf
 
 ### Detection logic (patch)
 
-Every `MD_PERIOD` ms (100 by default) the grid goes through **`libak_mrd`**, the same region
-analyzer the stock `viCam` uses (linked against the camera's own `/opt/vicam/libak_mrd.so`,
-nothing vendor-made is shipped). It groups active cells into regions and drops small, isolated or
+Every `MD_PERIOD` ms (100 by default) the grid goes through **`libak_mrd`**, the vendor's region
+analyzer (linked against the camera's own `/opt/vicam/libak_mrd.so`, nothing vendor-made is
+shipped). The stock `viCam` uses it only for PTZ motion tracking, not for the alarm; see below. It groups active cells into regions and drops small, isolated or
 flickering ones, using the day/night parameter sets from the SDK's own sample
 (`platform/sample/mt`), switched by `/tmp/daynight.state`. Motion = at least one region of
 `MD_MRD_MIN` cells or more (default 6). The grid is passed to it as `MD_ROWS` rows × 32 (default
@@ -69,7 +69,30 @@ While `/tmp/daynight.busy` exists (a day/night switch or IR-off probe, see
 [05-video-pipeline.md](05-video-pipeline.md#daynight-patch_daynightpy)), plus 4 s, motion is
 ignored, because the whole image jumps.
 
-### Tuning: a static scene can still trigger constantly
+**`MD_STOCK=1`** (web: "Algoritmo del firmware original") replaces all of the above with the stock
+app's own alarm rule. A cell is active when its value is ≥ `MD_STOCK_TH` (5120). Motion is when
+the number of active cells reaches the threshold for `MD_SENS` (0-100, like the app's slider):
+50 → 129 of 768 cells (~17%), 80 → 63 (~8%), 90 → 43 (~6%), 100 → 17 (~2%). The grid is sampled
+every 250 ms. There is no whole-frame rejection, so a close person at night and a light switching
+on or off both record. The stock app applies the rule per user-drawn zone; here it covers the
+whole frame. `/tmp/motion.level` shows it as `stock=N/63`. It is off by default.
+
+### How the stock `viCam` does it
+
+This was found by disassembling the stock binary (stripped, but its log strings name the source
+files):
+
+- **Alarm (`MotionDetect.cpp`):** reads the 32×24 grid every 250 ms. A cell is active if
+  `value >> 8 ≥ 20`. For each zone (`CMotionRegion::SetDetectParam`), motion is when
+  `active_ratio × S × 10000 ≥ B²`. S is the app sensitivity (0-100). B is 322 for S ≤ 49, 289 for
+  50-79, 256 for 80-89, 224 for 90-99 and 145 for 100. Alarms can be muted for a given time
+  (`DisableMoment(ms)`, "motion ignored! In disable moment!"). Person (`body`) and `hark`
+  detectors run alongside with their own settings. `MD_STOCK=1` reproduces the motion rule.
+- **PTZ tracking (`TargetTrack.cpp`, `MotionTrack`):** the only user of `libak_mrd`. It uses
+  filters 12000/6000 and regions of 10-300 cells, with the same parameters day and night. It never
+  calls `ak_mrd_set_mode` or the floating-wadding setter, unlike the SDK sample whose night set
+  this patch uses.
+
 
 The grid is **32×48 = 1536 cells**. The defaults (`MD_CELL_TH=80`, `MD_MIN_CELLS=6`) were far
 too sensitive on one unit: pointed at a plain, static wall, `/tmp/motion.level` showed

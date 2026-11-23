@@ -66,6 +66,23 @@ Manual override: `echo day|night|auto > /tmp/daynight.mode`. `/tmp/daynight.log`
 `DN_COLOR=0` disables the colour trigger (then set `DN_PROBE=300`), and `DN=0` disables the whole
 thread.
 
+**How the stock `viCam` does it** (`AdcRegionMgr.cpp`, found by disassembly). Boards with a light
+sensor read it through the ADC (`AdcAux*` in `base_para.ini`). Otherwise `SoftPhotosensitive` uses
+the per-sensor section `[SOFTPHSET_GC2083]` (version 2):
+
+- EV = exposure time × analog gain × digital gain × ISP gain (`ak_vpss_get_ae_run_info`); higher
+  means darker. R/G and B/G come from the AWB statistics (`ak_vpss_get_awb_stat_info`).
+- Night if EV ≥ 5500. Stay night while EV ≥ 1000.
+- Day if EV < 1000 and (R/G < 0.90 or B/G < 0.85), or if EV < 300 and B/G < 0.95.
+  Otherwise it keeps the current state.
+- `PhotosensitiveLock`: if it goes from night to day more than twice within a minute, it locks the
+  state for 30 minutes.
+- On a switch it calls `ak_vi_switch_mode`, waits 200 ms and adjusts the encoder fps/GOP.
+
+It never turns the IR off to measure. This patch keeps the same colour idea, but as a change from a
+learnt baseline confirmed by an IR-off probe, because the stock fixed thresholds come from AWB
+statistics this patch does not read and were never measured on this unit.
+
 ## Streams (`deploy/rtsp.ini`)
 
 | Stream | Codec | Resolution | Use |

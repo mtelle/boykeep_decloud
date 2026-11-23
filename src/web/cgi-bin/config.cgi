@@ -7,12 +7,13 @@
 # NOTE: this busybox has no tr, head or basename - everything below is pure shell
 # (IFS splitting + case + parameter expansion) or sed, both confirmed present.
 CFG=/mnt/sdcard/cam/etc/config.env
-KEYS="MD MD_MRD MD_MRD_MIN MD_CELL_TH MD_MIN_CELLS MD_HOLD MD_MAXCLIP MD_AUDIO MD_MINFREE MD_KEEPDAYS OSD OSD_X OSD_Y OSD_SCALE OSD_ALPHA OSD_FG OSD_BG"
+KEYS="MD MD_STOCK MD_SENS MD_MRD MD_MRD_MIN MD_CELL_TH MD_MIN_CELLS MD_HOLD MD_MAXCLIP MD_AUDIO MD_MINFREE MD_KEEPDAYS OSD OSD_X OSD_Y OSD_SCALE OSD_ALPHA OSD_FG OSD_BG"
 
 # default for a key missing from config.env (an older file): keep the rtspd built-in default
 # so the page shows - and a later save keeps - what is actually running
 def() {
   case "$1" in
+    MD_SENS) echo 80 ;;
     MD_MRD) echo 1 ;;
     MD_MRD_MIN) echo 6 ;;
     *) echo 0 ;;
