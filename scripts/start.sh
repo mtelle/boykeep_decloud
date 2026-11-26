@@ -33,10 +33,9 @@ export PATH=/etc/decloud-bin:$PATH
 $CAM/bin/dropbearmulti dropbear -r $CAM/etc/ssh_host_ed25519_key -p 22 &
 
 # 2b. Deteccion de movimiento + grabacion MP4 por evento.
-#     MD_CHN=1 (vs1, HEVC). Se probo a fondo sacar H.264 real de vs0 o vs1 para que el
-#     navegador no corte el video: IMPOSIBLE en este chip/SDK - vs1 lo rechaza con error
-#     explicito, vs0 lo degrada en silencio a MJPEG (verificado con trazas MD_DBG en vivo).
-#     Se queda en HEVC (ver docs/05-video-pipeline.md para el porque del corte en navegador).
+#     MD_CHN=1 (vs1, HEVC). H.264 no es posible en este chip: libmpi_venc y el driver del
+#     kernel lo bloquean y, forzado, el codificador se cuelga tras el primer fotograma
+#     (probado en hardware, ver docs/05-video-pipeline.md). Se queda en HEVC.
 #     MD_AUDIO=1 mezcla el audio del microfono en el .mp4. MD_KEEPDAYS>0 borra clips mas viejos.
 export MD=1 MD_FMT=mp4 MD_CHN=1 MD_CELL_TH=80 MD_MIN_CELLS=6 MD_HOLD=8 \
        MD_PERIOD=300 MD_MAXCLIP=120 MD_MINFREE=200 MD_KEEPDAYS=0 MD_AUDIO=0 MD_DIR=/mnt/sdcard/rec
@@ -68,17 +67,36 @@ if [ -n "$ISPREAL" ] && [ ! -f /system/etc/config/isp_gc2083_mipi_2lane_h3b.conf
     mount -o bind /tmp/ispcfg /system/etc/config
 fi
 
-# 3. RTSP (respawn). vs0=H.265 1080p (vivo), vs1=H.264 720p (grabacion + web)
+# 3. RTSP (respawn). vs0=H.265 1080p (vivo), vs1=H.265 720p (grabacion + web)
 $CAM/bin/rtspd -i $CAM/etc/rtsp.ini >/tmp/rtsp.log 2>&1 &
 
 # 4. Web (directo + PTZ + grabaciones) y ONVIF
 rm -rf /tmp/www/cgi-bin /tmp/www/index.html 2>/dev/null
 cp -r $CAM/www/* /tmp/www/ 2>/dev/null
 chmod +x /tmp/www/cgi-bin/* 2>/dev/null
+# ONVIF endpoints (/onvif/<service>): one tiny CGI per service, rebuilt each boot in tmpfs.
+# onvif_simple_server takes the service name as its last argument, reads -c for the conf
+# (it ignores ONVIF_CONF) and opens its XML templates relative to the current directory.
+mkdir -p /tmp/www/onvif
+# it exits WITHOUT answering if it cannot open its log. Our build (build_onvif.sh) moved that
+# log, and the default conf, from read-only /var/log and /etc to /tmp/onvif.
+mkdir -p /tmp/onvif
+for s in device_service media_service media2_service ptz_service events_service deviceio_service; do
+    printf '#!/bin/sh\ncd %s/bin/templates && exec %s/bin/onvif_simple_server -c /tmp/onvif.conf %s\n' "$CAM" "$CAM" "$s" > /tmp/www/onvif/$s
+    chmod +x /tmp/www/onvif/$s
+done
 rm -rf /tmp/www/rec 2>/dev/null                 # evita que ln -sf siga un symlink previo hacia la SD (vfat sin symlinks)
 ln -sf /mnt/sdcard/rec /tmp/www/rec              # grabaciones servidas en /rec (con Range -> seek)
 MAC=$(cat /sys/class/net/$WLAN/address 2>/dev/null | sed "s/://g")   # tr no existe en este busybox
-sed -e "s/^serial_num=SERIAL/serial_num=${MAC:-000000000000}/" -e "s/HOSTNAME/$(hostname)/" -e "s/^ifs=.*/ifs=$WLAN/" $CAM/etc/onvif_simple_server.conf > /tmp/onvif.conf
+# ONVIF auth: ONVIF clients (Home Assistant, ODM, NVRs) send credentials inside the SOAP body
+# (WS-Security), never as HTTP Basic, so our busybox httpd lets /onvif/* through
+# (src/tools/patch_busybox_httpd.py) and onvif_simple_server checks them itself. Same
+# user/password as the web unless ONVIF_USER/ONVIF_PASS are set in auth.env.
+OU=${ONVIF_USER:-$WEB_USER}; OP=${ONVIF_PASS:-$WEB_PASS}
+{ [ -n "$OU" ] && [ -n "$OP" ] && printf 'user=%s\npassword=%s\n' "$OU" "$OP"
+  sed -e "s/^serial_num=SERIAL/serial_num=${MAC:-000000000000}/" -e "s/HOSTNAME/$(hostname)/" -e "s/^ifs=.*/ifs=$WLAN/" $CAM/etc/onvif_simple_server.conf
+} > /tmp/onvif.conf
+chmod 600 /tmp/onvif.conf
 export ONVIF_CONF=/tmp/onvif.conf
 # httpd.conf: a single "/:user:pass" line if WEB_USER/WEB_PASS are set, empty otherwise
 # (busybox httpd's basic-auth format - see src/rtsp-patches/patch_rtsp_auth.py's comment for
@@ -97,6 +115,14 @@ $CAM/bin/wsd_simple_server -i $WLAN -x "http://%s/onvif/device_service" -m AK391
 
 # 5. PTZ homing (motorctl / driver stock)
 $CAM/bin/ptz home >/dev/null 2>&1 &
+
+# 5b. MQTT -> Home Assistant (camqtt, optional): only if $CAM/etc/mqtt.env exists and sets
+#     MQTT_HOST (never in git - see deploy/mqtt.env.example). camwatch restarts it if it dies.
+[ -f $CAM/etc/mqtt.env ] && . $CAM/etc/mqtt.env
+if [ -n "$MQTT_HOST" ] && [ -x $CAM/bin/camqtt ]; then
+    export MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS MQTT_ID MQTT_NAME MQTT_BASE MQTT_DISCOVERY MQTT_LANG MQTT_SNAP_INT MQTT_PTZ_STEPS
+    $CAM/bin/camqtt 2>>/tmp/camqtt.log &
+fi
 
 # 6. Watchdog (supervisa y reinicia servicios; HW watchdog opcional: WATCHDOG_HW=1)
 sh $CAM/camwatch.sh &

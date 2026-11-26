@@ -8,7 +8,7 @@ the libraries of your own dump** (`libplat_vi/vpss/common`, `libmpi_venc`, `libr
 ## Flow
 
 ```
-GC2083 sensor ──(MIPI)──► VI ──► VPSS (ISP: AE/AWB, day/night, MD) ──► VENC (H.264/H.265 HW)
+GC2083 sensor ──(MIPI)──► VI ──► VPSS (ISP: AE/AWB, day/night, MD) ──► VENC (H.265/JPEG HW)
                                                                         │
                                            ┌────────────────────────────┤
                                            ▼                            ▼
@@ -16,7 +16,7 @@ GC2083 sensor ──(MIPI)──► VI ──► VPSS (ISP: AE/AWB, day/night, M
 ```
 
 - **VI** captures from the sensor; **VPSS** applies the ISP (and exposes statistics: luminance,
-  **MD**, AF…); **VENC** encodes to H.264 or H.265 in hardware.
+  **MD**, AF…); **VENC** encodes to H.265 (or JPEG) in hardware; H.264 is not available on this chip.
 - The `video_encode_from_vi_th` loop pulls each frame with `ak_app_video_venc_get_stream()` →
   `struct video_stream` (see [03-motion-recording.md](03-motion-recording.md)) and pushes it to
   `librtsp_server`. The recording patch **tees** that same frame.
@@ -88,32 +88,30 @@ statistics this patch does not read and were never measured on this unit.
 | Stream | Codec | Resolution | Use |
 |---|---|---|---|
 | `vs0` | H.265 | 1920×1080 | live viewing (VLC / Home Assistant) |
-| `vs1` | H.265 ⚠️ | 1280×720 | motion recording + in-browser live |
+| `vs1` | H.265 | 1280×720 | motion recording + in-browser live |
 
 `isp_conf` points to the **GC2083** profile. If the CPU struggles with dual-stream, lower `vs1`.
 
-> ⚠️ **Neither `vs0` nor `vs1` can really do H.264 on this chip/SDK - confirmed on hardware,
-> tried both channels.** `libmpi_venc V2.0.44`:
-> - On `vs1`: `venc_check_and_format_param` rejects `enc_out_type=0` (H.264) outright, with an
-> explicit `enc_out_type error 0` in the log, and `ak_venc_open_ex` fails (`start_venc` /
-> `open venc failed`).
-> - On `vs0`: no error at all - `ak_venc_open_ex` reports success - but the encoder **silently
-> falls back to MJPEG**. Confirmed live with a temporary debug `printf` on every keyframe of
-> `md_record_feed`: with `video0`'s `code_type=h.264` in `rtsp.ini` and zero errors in the log,
-> `chn=0` still reported `enc=1` (`MJPEG_ENC_TYPE`) on every single frame, never `enc=0`.
+> ⚠️ **No H.264 on this chip, only H.265 (and JPEG). Tested on hardware.**
 >
-> Both channels therefore run H.265 (`vs0` natively via `code_type=h.265`; `vs1` via the
-> `enc_type=2`/`profile_type=4` override in `deploy/rtsp.ini`, since its own `code_type=h.264`
-> gets rejected as above). This is a real, apparently intentional hardware/firmware limitation
-> for this chip tier, not a configuration mistake - don't retry this without new evidence.
+> - `libmpi_venc.so` V2.0.44 rejects it: `venc_check_and_format_param` accepts only
+>   `enc_out_type` 1 (JPEG) or 2 (H.265) and logs `enc_out_type error 0` for H.264. The SDK's
+>   V3.0.02 is the mirror image (H.264 + JPEG): Anyka builds this library per chip.
+> - The kernel driver `ak_venc_adapter.ko` contains the Allegro H.264 code (it is shared with the
+>   AK3918AV100), but `AkvEncSetParams` rewrites any H.264 profile to H.265 Main ("AVC profile is
+>   not supported, it will be adjusted").
+> - With both blocks patched out in private test copies, the encoder produced one ~5 KB H.264
+>   I-frame and then stopped raising interrupts. The capture threads blocked and every stream,
+>   including the H.265 one, stalled. The H.264 path does not work on the EV300L.
+>
+> An earlier note here said `vs0` "silently falls back to MJPEG" when asked for H.264. That was a
+> config bug, not the encoder: the rtsp.ini parser only treats `#` at the start of a line as a
+> comment, so `code_type = h.265  # ...` was read as an unknown codec, and the SDK sample falls
+> back to JPEG for unknown codecs. Keep comments on their own lines in `rtsp.ini`.
 >
 > Consequence for the web UI's in-browser playback of recordings: H.265 is **not** reliably
 > supported by `<video>` in every browser (Safari/hardware-accelerated Chrome tend to be fine,
-> plain desktop Chrome/Firefox often are not, and clips can stall partway through rather than
-> finish) - VLC/`ffplay`/Home Assistant always work regardless. A real fix would mean
-> re-encoding to MJPEG (a sequence of JPEGs, universally browser-compatible, no video decoder
-> needed) with a custom JS player - bigger files, not yet implemented - or just
-> downloading/opening in VLC.
+> plain desktop Chrome/Firefox often are not). VLC/`ffplay`/Home Assistant always work.
 
 ---
 *Produced with AI assistance; API and structs taken from the SDK/device.*

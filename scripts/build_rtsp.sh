@@ -28,6 +28,7 @@ python3 $REPO/rtsp/patch_snapshot.py ak_rtsp_stream.c        # JPEG snapshot thr
 python3 $REPO/rtsp/patch_daynight.py ak_rtsp_stream.c        # automatic day/night (IR-cut, IR LEDs, ISP profile)
 python3 $REPO/rtsp/patch_motion.py ak_rtsp_stream.c          # HW motion detect + event recording (video+AAC) to SD
 python3 $REPO/rtsp/patch_osd.py ak_rtsp_stream.c             # burned-in date/time overlay (ISP OSD, both streams)
+python3 $REPO/rtsp/patch_quiet.py ak_rtsp_stream.c           # "encode fps" log lines only with VENC_FPS_LOG=1
 [ "${DBG:-0}" = 1 ] && python3 $REPO/rtsp/patch_debug.py ak_rtsp_stream.c ak_rtsp_server_sample.c
 
 for f in ak_rtsp_server_sample.c ak_rtsp_stream.c aas_ini_parser.c; do

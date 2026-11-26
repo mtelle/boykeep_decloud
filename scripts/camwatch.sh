@@ -49,8 +49,11 @@ while :; do
   alive httpd    || { log "httpd down -> restart";    start_httpd; }
   alive dropbear || { log "dropbear down -> restart"; start_ssh;   }
   alive wsd_simple_server || start_wsd
+  if [ -n "$MQTT_HOST" ] && [ -x $CAM/bin/camqtt ]; then
+    alive camqtt || { log "camqtt down -> restart"; $CAM/bin/camqtt 2>>/tmp/camqtt.log & }
+  fi
 
-  for f in /tmp/rtsp.log /tmp/watchdog.log /tmp/osd.log /tmp/timesync.log; do rotate_log "$f"; done
+  for f in /tmp/rtsp.log /tmp/watchdog.log /tmp/osd.log /tmp/timesync.log /tmp/camqtt.log; do rotate_log "$f"; done
 
   # feed the HW watchdog only while this supervisor loop is actually running
   [ -n "$HW" ] && printf 'x' >&9 2>/dev/null

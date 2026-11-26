@@ -23,7 +23,7 @@ instructions.
 | **All-in-one web** | `http://IP/` (port 80): live view + PTZ + recordings |
 | **Local RTSP** | `rtsp://IP:554/vs0` (H.265 1080p) and `/vs1` (H.265 720p - see
   [docs/05](docs/05-video-pipeline.md)) |
-| **Motion recording** | browser-playable H.264 MP4 on the SD, using the **ISP motion grid** (~0 CPU) |
+| **Motion recording** | H.265 MP4 on the SD, using the **ISP motion grid** (~0 CPU) |
 | **PTZ** | pan/tilt motor control (stock `ak_motor.ko` driver) |
 | **Time** | NTP from your router (no RTC battery), configurable TZ, hourly resync |
 | **SSH + scp** | dropbear (port 22), password set with `passwd`; `scp -O` for real file transfer |

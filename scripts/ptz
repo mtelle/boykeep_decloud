@@ -7,12 +7,15 @@ BIG=4000                     # "continuo" (mantener pulsado en la web): mueve ha
 # $2 (opcional): pasos concretos en vez de BIG - para un "nudge" de un solo tap (ej. Home Assistant,
 # que no tiene pulsar-y-soltar). Con pasos pequeños el motor se detiene solo al completarlos, sin
 # necesitar un 'stop' posterior (motorctl mantiene el fd abierto hasta que el movimiento termina).
+# $2 must be a whole number of steps. ONVIF ContinuousMove (onvif_simple_server: "left %f")
+# passes a decimal SPEED instead, e.g. "0.500000": that, or nothing, means continuous until 'stop'.
+case "$2" in ''|*[!0-9]*) N=$BIG ;; *) N=$2 ;; esac
 case "$1" in
   home|center) $M $PAN home; $M $TILT home ;;
-  left)  N=${2:-$BIG}; $M $PAN  move $((-PAN_SIGN*N)) & ;;
-  right) N=${2:-$BIG}; $M $PAN  move $(( PAN_SIGN*N)) & ;;
-  up)    N=${2:-$BIG}; $M $TILT move $(( TILT_SIGN*N)) & ;;
-  down)  N=${2:-$BIG}; $M $TILT move $((-TILT_SIGN*N)) & ;;
+  left)  $M $PAN  move $((-PAN_SIGN*N)) & ;;
+  right) $M $PAN  move $(( PAN_SIGN*N)) & ;;
+  up)    $M $TILT move $(( TILT_SIGN*N)) & ;;
+  down)  $M $TILT move $((-TILT_SIGN*N)) & ;;
   stop)  $M $PAN stop; $M $TILT stop ;;
   rel)   $M $PAN move $(( ${2%%.*} )); $M $TILT move $(( ${3%%.*} )) ;;
   pos)   echo "0,0,0" ;;

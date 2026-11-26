@@ -1,5 +1,5 @@
 import sys
-# patch_motion.py - HW motion detection + event recording (native MP4, browser-friendly H.264)
+# patch_motion.py - HW motion detection + event recording (native MP4: H.265 here, H.264 if available)
 #                   + AAC AUDIO track (mic), interleaved A/V, 2-track ISO-BMFF muxer.
 #
 # Detection: ak_vpss_md_get_stat(VIDEO_DEV0) returns a per-block u16 motion grid (ISP hardware,
@@ -25,6 +25,7 @@ import sys
 #   Retention: oldest pruned when free < MD_MINFREE MB, AND (if MD_KEEPDAYS>0) clips older than
 #   that many days are deleted.  MD_FMT=raw writes a raw .h264/.h265 (diagnostic, no audio).
 # Flags in /tmp: motion.active (while recording), motion.rec (current file), motion.level (score).
+# Runtime: /tmp/motion.off present -> detection keeps running but never records (camqtt switch).
 # Env: MD=0 disables. MD_FMT(mp4|raw) MD_CHN(0|1) MD_CELL_TH MD_MIN_CELLS MD_HOLD MD_PERIOD(ms)
 #      MD_MRD(1) MD_MRD_MIN(6) MD_ROWS(24, grid rows) MD_MRD_BIG/_SMALL (day filters, 12000/6000)
 #      MD_MRD_BIG_N/_SMALL_N (night filters, 15000/10000) MD_GLOBAL(150)/MD_GLOBAL_TH(1600)
@@ -594,12 +595,10 @@ void md_record_feed(int dev_id, int chn, int enc_type, int w, int h, struct vide
             g_a_sz  = ak_mem_alloc(MODULE_ID_APP, sizeof(unsigned)*MD_MAXSAMP);
         }
     }
-    /* enc_type==1 is MJPEG: belt-and-braces filter. Confirmed on hardware (AK3918EV300L,
-       libmpi_venc V2.0.44) that neither venc channel can do real H.264 here - vs1 rejects
-       it outright (venc_check_and_format_param: enc_out_type error 0), vs0 silently falls
-       back to MJPEG without raising any error (traced live via a temporary debug printf on
-       every keyframe: chn=0 always reported enc=1 regardless of the h.264 ini request). So
-       HEVC on vs1 (MD_CHN=1) is the only working combination - see docs/05-video-pipeline.md. */
+    /* enc_type==1 is MJPEG: never recorded. A stream is MJPEG when rtsp.ini's code_type is not
+       recognised (e.g. an inline "# comment" on that line). H.264 is not available on this chip
+       (blocked in libmpi_venc and the kernel driver; forced, the encoder hangs), so the
+       recorded stream is HEVC on vs1 (MD_CHN=1) - see docs/05-video-pipeline.md. */
     if (dev_id != 0 || chn != g_rec_chn || enc_type == 1) return;   /* record one stream only, never MJPEG */
 
     int want = md_now_ms() < g_md_rec_until;
@@ -745,6 +744,8 @@ static void *motion_th(void *arg)
         /* day/night switch or IR-off probe in progress: the whole image jumps, not motion */
         if (access("/tmp/daynight.busy", F_OK) == 0) dn_quiet_until = md_now_ms() + 4000;
         if (md_now_ms() < dn_quiet_until) motion = 0;
+        /* runtime off switch (camqtt / Home Assistant): keep analysing, never record */
+        if (access("/tmp/motion.off", F_OK) == 0) motion = 0;
         g_md_level = active;
         if (motion)
             g_md_rec_until = md_now_ms() + (long long)hold_s*1000;

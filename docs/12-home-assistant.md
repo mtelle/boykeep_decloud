@@ -162,3 +162,62 @@ cards:
 `steps=300` is a starting point - raise it for a bigger nudge per tap, lower it for finer control.
 The web UI's own hold-to-move buttons are unaffected: they call `ptz.cgi` without `steps`, which
 keeps the original continuous-until-`stop` behaviour.
+
+## 5. MQTT (`camqtt`): everything as one HA device, pushed, no YAML
+
+The REST sensors above poll. [`src/tools/camqtt.c`](../src/tools/camqtt.c) is an optional
+push alternative: a self-contained MQTT 3.1.1 client (one static binary of a few tens of KB, no
+libraries, no TLS) that connects to your broker, normally the **Mosquitto add-on** of Home
+Assistant, and announces itself with **MQTT Discovery**. One device appears in HA with:
+
+| Entity | Type | Source / effect on the camera |
+|---|---|---|
+| Motion | binary_sensor | `/tmp/motion.rec` (on while a clip records, including the `MD_HOLD` tail) |
+| Snapshot | camera | `snapshot.jpg`, sent on each motion start, every `MQTT_SNAP_INT` s and on request |
+| Day/night | sensor | `/tmp/daynight.state` |
+| Day/night mode | select | writes `/tmp/daynight.mode` (`auto`/`day`/`night`), kept across reboots |
+| Motion detection | switch | `/tmp/motion.off`: detection keeps running but never records; kept across reboots |
+| PTZ left/right/up/down/home | buttons | `bin/ptz <dir> MQTT_PTZ_STEPS` |
+| Take snapshot, Reboot | buttons | |
+| Last recording | sensor (timestamp) | newest clip; attributes `day`, `file`, `url`, `size_kb` |
+| Recordings today | sensor | today's clip count; attribute `clips` = the newest 20 (`day`, `file`, `url`, `size_kb`) |
+| SD free, Uptime, WiFi signal | diagnostic sensors | every 60 s |
+
+The recordings sensors replace the polled REST sensors of section 1: the camera pushes them about
+2 s after each clip is closed (it watches `/tmp/motion.rec`), and every 10 min to follow clips
+pruned by `MD_MINFREE`/`MD_KEEPDAYS`. It only reads the SD. Clip URLs use the camera's WiFi IP;
+set `MQTT_URL_BASE` (e.g. `http://camera.lan`) to override. Remove the section 1 REST sensors once
+these work, so Home Assistant stops polling.
+
+A Lovelace card with the list, newest first:
+
+```yaml
+type: markdown
+title: Recordings
+content: >-
+  {% for c in state_attr('sensor.camera_recordings_today', 'clips') or [] %}
+  - [{{ c.day }} {{ c.file[12:14] }}:{{ c.file[14:16] }}:{{ c.file[16:18] }}]({{ c.url }}) ({{ c.size_kb }} KB)
+  {% endfor %}
+```
+
+Check the real entity id under the device; it follows `MQTT_NAME` and `MQTT_LANG`.
+
+The camera goes "unavailable" in HA when it drops off (broker Last Will). When HA restarts,
+`camqtt` re-announces itself on the `homeassistant/status` birth message.
+
+**Setup**
+
+1. In HA, install and start the Mosquitto broker add-on. Any HA user can log in to it, or you can
+   add a dedicated login in the add-on configuration.
+2. Copy [`deploy/mqtt.env.example`](../deploy/mqtt.env.example) to
+   `/mnt/sdcard/cam/etc/mqtt.env` on the camera and fill in `MQTT_HOST`, `MQTT_USER` and
+   `MQTT_PASS`. Never commit the real file.
+3. Copy `camqtt` (built as in [INSTALL.md](INSTALL.md#2-build-the-binaries)) to
+   `/mnt/sdcard/cam/bin/` and reboot. `start.sh` starts it only when `mqtt.env` sets
+   `MQTT_HOST`, and `camwatch.sh` restarts it if it dies. The log is `/tmp/camqtt.log`.
+4. The device shows up under Settings → Devices & services → MQTT.
+
+The motion-detection switch needs an `rtspd` built with the current `patch_motion.py` (it checks
+`/tmp/motion.off`). Topics are documented in the header of `camqtt.c`. They are plain text, so
+you can also drive the camera with `mosquitto_pub`, for example
+`mosquitto_pub -t decloud/<id>/ptz/set -m left`.

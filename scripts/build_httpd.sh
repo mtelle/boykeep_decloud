@@ -39,6 +39,8 @@ if [ ! -d "$BB_SRC" ]; then
 fi
 
 B=/tmp/bb_build; rm -rf $B && cp -r "$BB_SRC" $B && cd $B
+# /onvif/* as CGI, and no HTTP Basic auth there (ONVIF authenticates itself) - see docs/13-auth.md
+python3 "$REPO/src/tools/patch_busybox_httpd.py" networking/httpd.c
 
 make ARCH=arm CROSS_COMPILE=$CROSS distclean >/dev/null 2>&1 || true
 make ARCH=arm CROSS_COMPILE=$CROSS defconfig

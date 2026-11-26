@@ -22,13 +22,13 @@ Turn the camera into a **100 % local** device: no cloud, a self-hosted RTSP serv
 | **All-in-one web** | `http://camera-IP/` (port 80) |
 | **Live view** | in the web (~5 fps) · full 1080p via `rtsp://IP:554/vs0` (VLC / Home Assistant) |
 | **PTZ** | arrows in the web (hold = move, release = stop) |
-| **Motion recording** | browser-playable H.264 `.mp4` on the SD |
+| **Motion recording** | H.265 `.mp4` on the SD |
 | **Time** | router NTP (no RTC battery), configurable TZ, hourly resync |
 | **SSH** | `root@IP` (port 22), password set with `passwd` once you have a root shell (UART or SD) |
 | **No cloud** | viCam stopped, auto-update disabled, camera isolated from the internet |
 
 **Ports:** 80 web · 554 RTSP · 22 SSH.
-**Streams:** `vs0` = H.265 1080p (live) · `vs1` = H.264 720p (recording + web).
+**Streams:** `vs0` = H.265 1080p (live) · `vs1` = H.265 720p (recording + web). No H.264 on this chip.
 
 ---
 
@@ -62,11 +62,13 @@ sudo docker run --rm -t -v "$PWD":/repo -v "$PWD/work":/work ak39-build bash -lc
   XT=/opt/xt/x-tools/arm-unknown-linux-uclibcgnueabi/bin &&
   $XT/arm-unknown-linux-uclibcgnueabi-gcc -march=armv5te -marm -static -O2 -o /work/out/sntpc /repo/tools/sntpc.c &&
   $XT/arm-unknown-linux-uclibcgnueabi-gcc -march=armv5te -marm -static -O2 -o /work/out/motorctl /repo/tools/motorctl.c &&
+  $XT/arm-unknown-linux-uclibcgnueabi-gcc -march=armv5te -marm -static -O2 -o /work/out/camqtt /repo/tools/camqtt.c &&
   echo BUILD_OK'
 ```
 
 You should see `BUILD_RTSP_OK` and `BUILD_OK`. Outputs land in `work/out/`:
-`rtspd`, `librtsp_server.so`, `sntpc`, `motorctl`.
+`rtspd`, `librtsp_server.so`, `sntpc`, `motorctl`, `camqtt` (optional MQTT bridge, see
+[12-home-assistant.md](12-home-assistant.md#5-mqtt-camqtt-everything-as-one-ha-device-pushed-no-yaml)).
 
 > `build_rtsp.sh` copies the SDK `rtsp` sample, runs the Python patches (motion detection + MP4
 > muxer, day/night, snapshot, no-audio, IP announce), then compiles and links against your
@@ -244,7 +246,7 @@ Configured by environment variables in `start.sh` (section `2b`). Detection uses
 |---|---|---|
 | `MD` | 1 | `MD=0` disables everything. |
 | `MD_FMT` | mp4 | `mp4` (browsable) or `raw` (.h264/.h265, diagnostic). |
-| `MD_CHN` | 1 | Stream to record: 1 = `vs1` (H.264 720p). |
+| `MD_CHN` | 1 | Stream to record: 1 = `vs1` (H.265 720p). |
 | `MD_CELL_TH` | 80 | Per-block threshold. Raise if false positives. |
 | `MD_MIN_CELLS` | 6 | Blocks in motion to trigger. Higher = less sensitive. |
 | `MD_HOLD` | 8 | Seconds to keep recording after motion stops. |
@@ -277,8 +279,8 @@ Configured by environment variables in `start.sh` (section `2b`). Detection uses
 
 ## 12. Tuning
 
-- **CPU / codec:** `vs1` at 720p H.264 **on top of** 1080p H.265 may be tight. If `/tmp/rtsp.log`
-  complains (drops, low "encode fps"), lower `vs1` in `etc/rtsp.ini` to 640×360.
+- **CPU / codec:** `vs1` at 720p **on top of** `vs0` at 1080p may be tight. If frames drop, run
+  `rtspd` with `VENC_FPS_LOG=1` to log "encode fps", and lower `vs1` in `etc/rtsp.ini` to 640×360.
 - **PTZ reversed:** edit `bin/ptz` and flip `PAN_SIGN` / `TILT_SIGN` to `-1`.
 - **Green/black image:** it's the GC2083 ISP config; confirm
   `isp_conf = ...isp_gc2083_mipi_2lane_h3b.conf` in `etc/rtsp.ini`.

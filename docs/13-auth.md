@@ -70,3 +70,22 @@ then it doesn't restrict anything, it just doesn't help either) in case a differ
 want the RTSP stream itself protected, do it at the network level - keep port 554 off the public
 internet and off any untrusted network/VLAN, same as you should for the web UI's port 80 even with
 `WEB_USER`/`WEB_PASS` set.
+
+## 3. ONVIF - works, with its own credentials
+
+ONVIF clients (Home Assistant's ONVIF integration, ONVIF Device Manager, NVRs) do not send HTTP
+Basic auth. They put the user and password inside the SOAP request (WS-Security
+UsernameToken). With `WEB_USER`/`WEB_PASS` set, busybox httpd's `/:user:pass` rule therefore
+answered every ONVIF request with **401**, even with the right credentials typed in HA.
+
+Fix:
+
+- [`src/tools/patch_busybox_httpd.py`](../src/tools/patch_busybox_httpd.py) makes httpd skip HTTP
+  auth for `/onvif/*` only (the rest of the web stays protected).
+- `start.sh` writes `user=`/`password=` into `/tmp/onvif.conf`, so `onvif_simple_server` checks
+  the WS-Security credentials itself. They are the web ones, unless `ONVIF_USER`/`ONVIF_PASS` are
+  set in `auth.env`.
+
+Both parts are needed. The new busybox without credentials in `onvif.conf` would leave ONVIF
+open. Credentials without the new busybox still give 401. With no `WEB_USER`/`WEB_PASS`, nothing
+changes: ONVIF stays open, like the rest.

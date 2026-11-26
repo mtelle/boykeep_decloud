@@ -135,7 +135,7 @@ The patch **tees** that stream into a **hand-written ISO-BMFF muxer** (no `ffmpe
 - `ftyp` + a streamed `mdat` (Annex-B NALs rewritten as 4-byte **length-prefixed**).
 - On close it writes a full `moov`: `stsd` with **`avcC`** (H.264) or **`hvcC`** (H.265), `stts`
   with **real durations** from the encoder timestamps, and `stss` at the I-frames ⇒ a `.mp4` with
-  **duration and seeking**, playable in a browser (H.264), VLC and Home Assistant.
+  **duration and seeking**, playable in VLC and Home Assistant (and in browsers with H.265 support).
 - Rotates every `MD_MAXCLIP` s at an I-frame, and prunes the oldest clips when the SD drops below
   `MD_MINFREE` MB.
 
@@ -155,9 +155,10 @@ dependency-free**, and is validated by opening a clip with `ffprobe`/VLC.
 
 ## Codec and web
 
-Both stock streams were H.265; H.265 **does not play in browsers**. So `vs1` is switched to
-**H.264 720p** and is the one recorded (`MD_CHN=1`), so clips play in the web UI. `vs0` stays
-**H.265 1080p** for high-quality live viewing.
+Both streams are H.265: this chip has no working H.264 encoder (see
+[05-video-pipeline.md](05-video-pipeline.md#streams-deployrtspini)). `vs1` (720p) is the one
+recorded (`MD_CHN=1`); `vs0` (1080p) is for live viewing. H.265 clips play in VLC, `ffplay` and
+Home Assistant, but not in every browser. The muxer still writes `avcC` for H.264 sources.
 
 Code: [src/rtsp-patches/patch_motion.py](../src/rtsp-patches/patch_motion.py).
 Tuning variables: see [INSTALL.md §10](INSTALL.md).
